@@ -1,0 +1,9 @@
+* text=auto
+*.cpp text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.ui text eol=lf
+*.md text eol=lf
+*.ps1 text eol=lf
+*.dll binary
+*.cat binary

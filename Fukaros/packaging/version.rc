@@ -1,0 +1,28 @@
+#include <windows.h>
+1 VERSIONINFO
+FILEVERSION 0,4,0,0
+PRODUCTVERSION 0,4,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040904B0"
+  BEGIN
+   VALUE "CompanyName", "HuTaoUnknow\0"
+   VALUE "FileDescription", "Fukaros desktop screen sharing\0"
+   VALUE "FileVersion", "0.4.0\0"
+   VALUE "InternalName", "Fukaros\0"
+   VALUE "OriginalFilename", "Fukaros.exe\0"
+   VALUE "ProductName", "Fukaros\0"
+   VALUE "ProductVersion", "0.4.0\0"
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x409, 1200
+ END
+END

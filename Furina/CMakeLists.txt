@@ -1,0 +1,64 @@
+cmake_minimum_required(VERSION 3.22)
+project(Furina VERSION 0.4.0 LANGUAGES C CXX)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Network)
+qt_add_executable(Furina main.cpp mainwindow.cpp mainwindow.h mainwindow.ui settings.ui core/androidbridge.cpp core/androidbridge.h
+ core/furina_protocol.c core/furina_protocol.h core/peer.cpp core/peer.h core/screenview.cpp core/screenview.h core/interface_support.cpp core/interface_support.h core/session_consent.cpp core/session_consent.h core/video_policy.c core/video_policy.h core/desktop_video.cpp core/desktop_video.h core/desktop_cursor.h core/cursor_shape.c core/cursor_shape.h)
+target_include_directories(Furina PRIVATE core core/vendor/ffmpeg)
+target_link_libraries(Furina PRIVATE Qt6::Widgets Qt6::Network)
+if(ANDROID)
+ file(GLOB_RECURSE FURINA_JAVA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/core/android/*.java" "${CMAKE_CURRENT_SOURCE_DIR}/android/src/*.java")
+ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FURINA_JAVA_SOURCES})
+ set_source_files_properties(${FURINA_JAVA_SOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+ target_sources(Furina PRIVATE ${FURINA_JAVA_SOURCES})
+ set(FURINA_ANDROID_PACKAGE "${CMAKE_CURRENT_BINARY_DIR}/furina-android-package")
+ file(MAKE_DIRECTORY "${FURINA_ANDROID_PACKAGE}")
+ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/android/" DESTINATION "${FURINA_ANDROID_PACKAGE}")
+ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/core/android/" DESTINATION "${FURINA_ANDROID_PACKAGE}/src")
+ set_target_properties(Furina PROPERTIES
+  QT_ANDROID_PACKAGE_SOURCE_DIR "${FURINA_ANDROID_PACKAGE}"
+  QT_ANDROID_PACKAGE_NAME "com.furina.black"
+  QT_ANDROID_MIN_SDK_VERSION 28
+  QT_ANDROID_TARGET_SDK_VERSION 35
+  QT_ANDROID_COMPILE_SDK_VERSION 36
+  QT_ANDROID_SDK_BUILD_TOOLS_REVISION "36.0.0"
+  QT_ANDROID_VERSION_CODE 4
+  QT_ANDROID_VERSION_NAME "0.4.0")
+elseif(MINGW)
+ target_link_options(Furina PRIVATE -mwindows)
+endif()
+if(NOT ANDROID)
+ include(CTest)
+ if(BUILD_TESTING)
+  find_package(Qt6 REQUIRED COMPONENTS Test)
+  qt_add_executable(black_ui_test tests/ui_test.cpp mainwindow.cpp mainwindow.h mainwindow.ui settings.ui core/androidbridge.cpp core/androidbridge.h core/peer.cpp core/peer.h core/screenview.cpp core/screenview.h core/furina_protocol.c core/interface_support.cpp core/interface_support.h core/session_consent.cpp core/session_consent.h core/video_policy.c core/video_policy.h core/desktop_video.cpp core/desktop_video.h core/desktop_cursor.h core/cursor_shape.c core/cursor_shape.h)
+  target_include_directories(black_ui_test PRIVATE core core/vendor/ffmpeg ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(black_ui_test PRIVATE Qt6::Test Qt6::Widgets Qt6::Network)
+  add_test(NAME black_ui COMMAND black_ui_test)
+  set_tests_properties(black_ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_FONTDIR=C:/Windows/Fonts")
+ endif()
+endif()
+
+if(WIN32)
+ foreach(video_target Furina black_ui_test)
+  if(TARGET ${video_target})
+   target_link_libraries(${video_target} PRIVATE d3d11 dxgi ole32 winmm d3dcompiler)
+  endif()
+ endforeach()
+endif()
+
+if(BUILD_TESTING AND NOT ANDROID)
+ add_executable(video_test core/tests/video_test.c core/video_policy.c core/furina_protocol.c)
+ target_include_directories(video_test PRIVATE core)
+ add_test(NAME video_policy COMMAND video_test)
+endif()
+
+if(WIN32 AND BUILD_TESTING)
+ add_executable(cursor_test core/tests/cursor_test.cpp core/cursor_shape.c)
+ target_include_directories(cursor_test PRIVATE core)
+ target_link_libraries(cursor_test PRIVATE d3d11 dxgi d3dcompiler)
+ add_test(NAME desktop_cursor COMMAND cursor_test)
+endif()

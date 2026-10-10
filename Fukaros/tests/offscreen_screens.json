@@ -1,0 +1,7 @@
+{
+  "screens": [
+    {"name":"primary-test", "x":0, "y":0, "width":1920, "height":1080, "logicalDpi":96, "logicalBaseDpi":96, "dpr":1},
+    {"name":"clone-test", "x":0, "y":0, "width":1920, "height":1080, "logicalDpi":96, "logicalBaseDpi":96, "dpr":1},
+    {"name":"extended-test", "x":1920, "y":0, "width":1280, "height":800, "logicalDpi":96, "logicalBaseDpi":96, "dpr":1}
+  ]
+}

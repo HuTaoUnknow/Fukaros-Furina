@@ -1,0 +1,6 @@
+build*/
+bin/
+apk/
+dist/
+*.user
+*.user.*

@@ -1,0 +1,604 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="windowTitle">
+   <string>Fukaros</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="mainLayout" stretch="0,1">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="sidebar">
+      <property name="minimumWidth">
+       <number>48</number>
+      </property>
+      <property name="maximumWidth">
+       <number>48</number>
+      </property>
+      <layout class="QVBoxLayout" name="toolbarLayout">
+       <property name="spacing">
+        <number>12</number>
+       </property>
+       <property name="leftMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>4</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QPushButton" name="start">
+         <property name="text">
+          <string>开始</string>
+         </property>
+         <property name="minimumHeight">
+          <number>40</number>
+         </property>
+         <property name="minimumWidth">
+          <number>40</number>
+         </property>
+         <property name="maximumHeight">
+          <number>40</number>
+         </property>
+         <property name="maximumWidth">
+          <number>40</number>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="stop">
+         <property name="text">
+          <string>停止</string>
+         </property>
+         <property name="minimumHeight">
+          <number>40</number>
+         </property>
+         <property name="minimumWidth">
+          <number>40</number>
+         </property>
+         <property name="maximumHeight">
+          <number>40</number>
+         </property>
+         <property name="maximumWidth">
+          <number>40</number>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="toolbarSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="settings">
+         <property name="text">
+          <string />
+         </property>
+         <property name="minimumHeight">
+          <number>40</number>
+         </property>
+         <property name="minimumWidth">
+          <number>40</number>
+         </property>
+         <property name="maximumHeight">
+          <number>40</number>
+         </property>
+         <property name="maximumWidth">
+          <number>40</number>
+         </property>
+         <property name="toolTip">
+          <string>设置</string>
+         </property>
+         <property name="accessibleName">
+          <string>设置</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="maximize">
+         <property name="text">
+          <string />
+         </property>
+         <property name="minimumHeight">
+          <number>40</number>
+         </property>
+         <property name="minimumWidth">
+          <number>40</number>
+         </property>
+         <property name="maximumHeight">
+          <number>40</number>
+         </property>
+         <property name="maximumWidth">
+          <number>40</number>
+         </property>
+         <property name="toolTip">
+          <string>放大</string>
+         </property>
+         <property name="accessibleName">
+          <string>放大</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="contentPanel">
+      <layout class="QVBoxLayout" name="contentLayout" stretch="1,0">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="viewPanel">
+         <layout class="QVBoxLayout" name="viewLayout">
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <property name="spacing">
+           <number>0</number>
+          </property>
+         </layout>
+         <widget class="QWidget" name="windowControls">
+          <layout class="QHBoxLayout" name="windowControlsLayout">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QPushButton" name="windowMinimize">
+             <property name="text">
+              <string />
+             </property>
+             <property name="toolTip">
+              <string>最小化</string>
+             </property>
+             <property name="accessibleName">
+              <string>最小化</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="windowMaximize">
+             <property name="text">
+              <string />
+             </property>
+             <property name="toolTip">
+              <string>最大化窗口</string>
+             </property>
+             <property name="accessibleName">
+              <string>最大化窗口</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="windowClose">
+             <property name="text">
+              <string />
+             </property>
+             <property name="toolTip">
+              <string>关闭</string>
+             </property>
+             <property name="accessibleName">
+              <string>关闭</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="bottomPanel">
+         <property name="minimumHeight">
+          <number>142</number>
+         </property>
+         <property name="maximumHeight">
+          <number>220</number>
+         </property>
+         <layout class="QHBoxLayout" name="bottomLayout" stretch="4,6">
+          <property name="spacing">
+           <number>16</number>
+          </property>
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="directionPanel">
+            <layout class="QVBoxLayout" name="directionLayout">
+             <property name="spacing">
+              <number>3</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="directionTitle">
+               <property name="text">
+                <string>投屏方向</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="directionChoices">
+               <item>
+                <widget class="QCheckBox" name="share">
+                 <property name="text">
+                  <string>向平板分享屏幕</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="receive">
+                 <property name="text">
+                  <string>获取平板屏幕</string>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QWidget" name="modePanel">
+               <layout class="QVBoxLayout" name="modeLayout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <layout class="QHBoxLayout" name="modeChoices">
+                  <item>
+                   <widget class="QCheckBox" name="duplicate">
+                    <property name="text">
+                     <string>复制</string>
+                    </property>
+                    <property name="checked">
+                     <bool>true</bool>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QCheckBox" name="extend">
+                    <property name="text">
+                     <string>扩展</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QLabel" name="castHint">
+                  <property name="text">
+                   <string>选择共享方式</string>
+                  </property>
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QWidget" name="resolutionPanel">
+               <layout class="QVBoxLayout" name="resolutionLayout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <property name="spacing">
+                 <number>0</number>
+                </property>
+                <item>
+                 <layout class="QHBoxLayout" name="resolutionChoices">
+                  <item>
+                   <widget class="QPushButton" name="resolution1920">
+                    <property name="text">
+                     <string>1920</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>true</bool>
+                    </property>
+                    <property name="checked">
+                     <bool>false</bool>
+                    </property>
+                    <property name="toolTip">
+                     <string>最长边像素数，保持比例；自动优先 60 FPS</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="resolution1080">
+                    <property name="text">
+                     <string>1080</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>true</bool>
+                    </property>
+                    <property name="checked">
+                     <bool>false</bool>
+                    </property>
+                    <property name="toolTip">
+                     <string>最长边像素数，保持比例；自动优先 60 FPS</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="resolution720">
+                    <property name="text">
+                     <string>720</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>true</bool>
+                    </property>
+                    <property name="checked">
+                     <bool>false</bool>
+                    </property>
+                    <property name="toolTip">
+                     <string>最长边像素数，保持比例；自动优先 60 FPS</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="resolution0">
+                    <property name="text">
+                     <string>自动</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>true</bool>
+                    </property>
+                    <property name="checked">
+                     <bool>true</bool>
+                    </property>
+                    <property name="toolTip">
+                     <string>最长边像素数，保持比例；自动优先 60 FPS</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QLabel" name="performanceHint">
+                  <property name="text">
+                   <string>目标 60 FPS · 自动优先帧率</string>
+                  </property>
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <spacer name="directionSpacer">
+               <property name="orientation">
+                <enum>Qt::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="debugPanel">
+            <layout class="QVBoxLayout" name="debugLayout">
+             <property name="spacing">
+              <number>4</number>
+             </property>
+             <item>
+              <widget class="QFrame" name="consentPanel">
+               <property name="visible">
+                <bool>false</bool>
+               </property>
+               <layout class="QVBoxLayout" name="consentLayout">
+                <property name="spacing">
+                 <number>4</number>
+                </property>
+                <property name="leftMargin">
+                 <number>6</number>
+                </property>
+                <property name="rightMargin">
+                 <number>6</number>
+                </property>
+                <property name="topMargin">
+                 <number>6</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>6</number>
+                </property>
+                <item>
+                 <widget class="QLabel" name="consentMessage">
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                  <property name="text">
+                   <string>等待确认 / Awaiting approval</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QHBoxLayout" name="consentChoices">
+                  <item>
+                   <widget class="QPushButton" name="consentAccept">
+                    <property name="text">
+                     <string>同意 / Allow</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="consentReject">
+                    <property name="text">
+                     <string>拒绝 / Reject</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="debugTitle">
+               <property name="text">
+                <string>调试信息 / Debug</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPlainTextEdit" name="log">
+               <property name="readOnly">
+                <bool>true</bool>
+               </property>
+               <property name="maximumBlockCount">
+                <number>400</number>
+               </property>
+               <property name="horizontalScrollBarPolicy">
+                <enum>Qt::ScrollBarAlwaysOff</enum>
+               </property>
+               <property name="lineWrapMode">
+                <enum>QPlainTextEdit::WidgetWidth</enum>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources />
+ <connections />
+ <customwidgets>
+  <customwidget>
+   <class>FurinaComboBox</class>
+   <extends>QComboBox</extends>
+   <header>interface_support.h</header>
+  </customwidget>
+ </customwidgets>
+</ui>

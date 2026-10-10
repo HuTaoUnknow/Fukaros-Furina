@@ -1,0 +1,27 @@
+# Build outputs and local Qt Creator state
+**/build*/
+**/bin/
+**/apk/
+**/dist/
+*.user
+*.user.*
+.vs/
+.idea/
+.qt/
+__pycache__/
+*.pyc
+# Local credentials and signing material
+.env
+.env.*
+*.keystore
+*.jks
+*.p12
+*.pem
+local.properties
+gradle.properties
+# Generated diagnostics and captures
+*.log
+*.apk
+*.aab
+*.zip
+*.7z
