@@ -114,6 +114,13 @@ QString furinaStyle(){return QStringLiteral(R"(
  QLineEdit,QComboBox { background:#0c121a; border:1px solid #394b5e; border-radius:5px; padding:7px; min-height:24px; }
  QComboBox::drop-down { border:0px; border-left:1px solid #435264; background:#253344; width:24px; }
  QFrame#settingsSeparator { border:0px; border-top:1px solid #5c758d; min-height:8px; max-height:8px; margin-top:6px; }
+ QGroupBox { border:1px solid #394b5e; border-radius:5px; margin-top:12px; padding:12px 8px 8px; }
+ QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }
+ QTabWidget::pane { border:1px solid #394b5e; border-radius:5px; padding:8px; }
+ QTabBar::tab { background:#253344; border:1px solid #394b5e; padding:9px 16px; }
+ QTabBar::tab:selected { background:#216e89; }
+ QTabBar::tab:disabled,QCheckBox:disabled,QLineEdit:disabled { color:#768393; }
+ QLabel#sessionSettingsHint { color:#f0c779; }
  QRadioButton { padding:6px 0px; }
  QRadioButton::indicator { width:16px; height:16px; border:1px solid #8096ae; border-radius:8px; background:#0c121a; }
  QRadioButton::indicator:checked { background:#57b9d8; border:3px solid #244658; }

@@ -7,6 +7,17 @@
   </property>
   <layout class="QVBoxLayout" name="dialogLayout">
    <item>
+    <widget class="QLabel" name="sessionSettingsHint">
+     <property name="text">
+      <string>投屏期间仅清晰度可调整，点击停止后可修改连接参数。
+Only resolution can change while casting. Press Stop to edit connection settings.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QScrollArea" name="settingsScroll">
      <property name="widgetResizable">
       <bool>true</bool>
@@ -17,59 +28,211 @@
      <widget class="QWidget" name="settingsContents">
       <layout class="QVBoxLayout" name="settingsLayout">
        <item>
-        <layout class="QFormLayout" name="connectionForm">
-         <item row="0" column="0">
-          <widget class="QLabel" name="hostLabel">
-           <property name="text">
-            <string>平板 IP 地址</string>
-           </property>
-           <property name="wordWrap">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QLineEdit" name="host">
-           <property name="placeholderText">
-            <string>例如 192.168.1.100</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="serialLabel">
-           <property name="text">
-            <string>设备码</string>
-           </property>
-           <property name="wordWrap">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QLineEdit" name="serial">
-           <property name="placeholderText">
-            <string>USB 设备序列号</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="tokenLabel">
-           <property name="text">
-            <string>配对码</string>
-           </property>
-           <property name="wordWrap">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QLineEdit" name="token">
-           <property name="placeholderText">
-            <string>至少 6 位</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <widget class="QGroupBox" name="pairingGroup">
+         <property name="title">
+          <string>配对设置（USB / Wi-Fi 共用）</string>
+         </property>
+         <layout class="QVBoxLayout" name="pairingGroupLayout">
+          <item>
+           <layout class="QFormLayout" name="pairingForm">
+            <item row="0" column="0">
+             <widget class="QLabel" name="tokenLabel">
+              <property name="text">
+               <string>配对码</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="token">
+              <property name="placeholderText">
+               <string>至少 6 位，与对端一致</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTabWidget" name="transport">
+         <widget class="QWidget" name="usbPage">
+          <attribute name="title">
+           <string>USB 有线</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="usbPageLayout">
+           <item>
+            <layout class="QFormLayout" name="usbPageForm">
+             <item row="0" column="0">
+              <widget class="QLabel" name="serialLabel">
+               <property name="text">
+                <string>USB 设备码</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="serial">
+               <property name="placeholderText">
+                <string>USB 设备序列号</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QFrame" name="usbSeparator">
+             <property name="frameShape">
+              <enum>QFrame::HLine</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Sunken</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QFormLayout" name="adbForm">
+             <item row="0" column="0">
+              <widget class="QLabel" name="adbPathLabel">
+               <property name="text">
+                <string>ADB 路径</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="adbPath">
+               <property name="placeholderText">
+                <string>安装包内置 ADB，或选择已有 adb.exe</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="usbActions">
+             <item>
+              <widget class="QPushButton" name="refresh">
+               <property name="text">
+                <string>刷新 USB 设备</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="adbPreview">
+               <property name="text">
+                <string>ADB 预览 / 控制</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QLabel" name="usbHint">
+             <property name="text">
+              <string>USB 无需填写 IP。请允许平板 USB 调试，设备码留空时自动选择唯一已授权设备。</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="wifiPage">
+          <attribute name="title">
+           <string>Wi-Fi 无线</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="wifiPageLayout">
+           <item>
+            <layout class="QFormLayout" name="wifiPageForm">
+             <item row="0" column="0">
+              <widget class="QLabel" name="hostLabel">
+               <property name="text">
+                <string>平板 IP 地址</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="host">
+               <property name="placeholderText">
+                <string>例如 192.168.1.100</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QFrame" name="wifiSeparator">
+             <property name="frameShape">
+              <enum>QFrame::HLine</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Sunken</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="wifiDebugTitle">
+             <property name="text">
+              <string>无线 ADB（可选调试参数）</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QFormLayout" name="wirelessAdbForm">
+             <item row="0" column="0">
+              <widget class="QLabel" name="adbEndpointLabel">
+               <property name="text">
+                <string>调试地址</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="adbEndpoint">
+               <property name="placeholderText">
+                <string>IP:调试端口</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QPushButton" name="adbConnect">
+             <property name="text">
+              <string>连接无线 ADB</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="wifiHint">
+             <property name="text">
+              <string>正常 Wi-Fi 投屏只需平板 IP 与共用配对码；无线 ADB 用于调试。</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
        </item>
        <item>
         <widget class="QFrame" name="settingsSeparator">
@@ -82,158 +245,83 @@
         </widget>
        </item>
        <item>
-        <widget class="QLabel" name="advancedTitle">
-         <property name="text">
-          <string>其他选项</string>
+        <widget class="QGroupBox" name="displayGroup">
+         <property name="title">
+          <string>电脑分享设置</string>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="displayGroupLayout">
+          <item>
+           <widget class="QLabel" name="castSourceLabel">
+            <property name="text">
+             <string>电脑投屏显示器</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="FurinaComboBox" name="castSource" />
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="screenActions">
+            <item>
+             <widget class="QPushButton" name="refreshScreens">
+              <property name="text">
+               <string>刷新显示器</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="displaySettings">
+              <property name="text">
+               <string>Windows 显示设置</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
-        <widget class="QLabel" name="transportLabel">
-         <property name="text">
-          <string>连接方式</string>
+        <widget class="QGroupBox" name="navigationGroup">
+         <property name="title">
+          <string>平板导航</string>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="navigationGroupLayout">
+          <item>
+           <layout class="QHBoxLayout" name="navigation">
+            <item>
+             <widget class="QPushButton" name="back">
+              <property name="text">
+               <string>返回</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="home">
+              <property name="text">
+               <string>主页</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="recent">
+              <property name="text">
+               <string>任务</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
         </widget>
-       </item>
-       <item>
-        <widget class="FurinaComboBox" name="transport">
-         <item>
-          <property name="text">
-           <string>USB</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Wi-Fi</string>
-          </property>
-         </item>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="adbPathLabel">
-         <property name="text">
-          <string>ADB 路径</string>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLineEdit" name="adbPath">
-         <property name="placeholderText">
-          <string />
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="refresh">
-         <property name="text">
-          <string>刷新 USB 设备</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="adbEndpointLabel">
-         <property name="text">
-          <string>无线 ADB 调试地址</string>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLineEdit" name="adbEndpoint">
-         <property name="placeholderText">
-          <string>IP:调试端口</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="adbActions">
-         <item>
-          <widget class="QPushButton" name="adbConnect">
-           <property name="text">
-            <string>连接无线 ADB</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="adbPreview">
-           <property name="text">
-            <string>ADB 预览 / 控制</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="navigation">
-         <item>
-          <widget class="QPushButton" name="back">
-           <property name="text">
-            <string>返回</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="home">
-           <property name="text">
-            <string>主页</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="recent">
-           <property name="text">
-            <string>任务</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <widget class="QLabel" name="castSourceLabel">
-         <property name="text">
-          <string>电脑投屏显示器</string>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="FurinaComboBox" name="castSource" />
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="screenActions">
-         <item>
-          <widget class="QPushButton" name="refreshScreens">
-           <property name="text">
-            <string>刷新显示器</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="displaySettings">
-           <property name="text">
-            <string>Windows 显示设置</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
        </item>
        <item>
         <widget class="QLabel" name="connectionHint">
          <property name="text">
-          <string>USB 使用设备码；Wi-Fi 使用平板 IP。请填写平板设置中显示的配对码。</string>
+          <string>先配置连接参数并保存，再按开始。投屏开始后点击停止才能改变投屏方式。</string>
          </property>
          <property name="wordWrap">
           <bool>true</bool>

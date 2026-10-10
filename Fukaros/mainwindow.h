@@ -10,6 +10,7 @@
 #include "screenview.h"
 #include "interface_support.h"
 #include "session_consent.h"
+#include "cast_ui_state.h"
 #include "adb.h"
 #include "desktop_video.h"
 #include "virtual_display_controller.h"
@@ -22,7 +23,7 @@ public:
 protected:
  void resizeEvent(QResizeEvent *event) override;
 private:
- Ui::MainWindow *ui;Ui::SettingsDialog *cfg;QDialog *m_settings;DirectionChoice *m_direction;SessionConsent *m_consent;
+ Ui::MainWindow *ui;Ui::SettingsDialog *cfg;QDialog *m_settings;DirectionChoice *m_direction;SessionConsent *m_consent;CastUiState *m_castUi;
  Peer m_peer;Adb m_adb;ScreenView *m_view;Presentation *m_presentation;
  VirtualDisplayController m_virtual;
  DesktopVideoSender m_videoSender;DesktopVideoReceiver m_videoReceiver;ResolutionChoice *m_resolution;

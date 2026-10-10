@@ -8,6 +8,7 @@ class ScreenView : public QWidget {
 public:
  explicit ScreenView(QWidget *parent=nullptr);
  void setImage(const QImage &image);
+ void setBusy(bool busy);bool busy()const{return m_busy;}
  bool hasImage() const{return !m_image.isNull();}
  void setInteractive(bool enabled){m_interactive=enabled;}
  int takeDisplayedFrames(){const auto count=m_displayed;m_displayed=0;return count;}
@@ -20,6 +21,6 @@ protected:
  void mouseReleaseEvent(QMouseEvent*) override;
  void keyPressEvent(QKeyEvent*) override;
 private:
- QImage m_image;bool m_interactive=false,m_pressed=false;uint32_t m_x=0,m_y=0;QElapsedTimer m_press;
+ QImage m_image;bool m_busy=false,m_interactive=false,m_pressed=false;uint32_t m_x=0,m_y=0;QElapsedTimer m_press;
  quint64 m_revision=0,m_painted=0;int m_displayed=0;
 };

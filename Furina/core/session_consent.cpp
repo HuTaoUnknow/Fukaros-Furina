@@ -19,7 +19,7 @@ SessionConsent::SessionConsent(Peer *peer,QWidget *window):QObject(window),m_pee
 void SessionConsent::clear(){m_timeout.stop();m_panel->hide();m_id=0;m_options=0;m_waiting=false;m_active=false;m_local=false;m_sharing=false;}
 void SessionConsent::cancel(){if(m_id)m_peer->sendApproval(m_id,FR_APPROVAL_CANCEL,m_options);clear();}
 bool SessionConsent::request(bool sharing,bool extended){
- if(!m_peer->ready()||m_waiting)return false;
+ if(!m_peer->ready()||m_waiting||m_requestsBlocked)return false;
  cancel();do{m_id=QRandomGenerator::system()->generate();}while(!m_id);
  m_options=sharing?FR_APPROVAL_SHARE:FR_APPROVAL_RECEIVE;
  if(extended)m_options|=FR_APPROVAL_EXTEND;
@@ -39,7 +39,7 @@ void SessionConsent::answer(bool accept){
 }
 void SessionConsent::handle(quint32 id,quint32 verb,quint32 options){
  if(verb==FR_APPROVAL_REQUEST){
-  if(m_waiting||m_active){m_peer->sendApproval(id,FR_APPROVAL_REJECT,options);return;}
+  if(m_requestsBlocked||m_waiting||m_active){m_peer->sendApproval(id,FR_APPROVAL_REJECT,options);return;}
   m_id=id;m_options=options;m_local=false;m_waiting=true;m_timeout.start();
   const bool peerSharing=(options&FR_APPROVAL_SHARE)!=0;
   const QString cn=peerSharing?"对端请求向本机分享屏幕。":"对端请求获取本机屏幕。";

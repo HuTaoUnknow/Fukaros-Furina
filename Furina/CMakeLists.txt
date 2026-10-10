@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Furina VERSION 0.4.0 LANGUAGES C CXX)
+project(Furina VERSION 0.4.1 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
@@ -25,8 +25,8 @@ if(ANDROID)
   QT_ANDROID_TARGET_SDK_VERSION 35
   QT_ANDROID_COMPILE_SDK_VERSION 36
   QT_ANDROID_SDK_BUILD_TOOLS_REVISION "36.0.0"
-  QT_ANDROID_VERSION_CODE 4
-  QT_ANDROID_VERSION_NAME "0.4.0")
+  QT_ANDROID_VERSION_CODE 5
+  QT_ANDROID_VERSION_NAME "0.4.1")
 elseif(MINGW)
  target_link_options(Furina PRIVATE -mwindows)
 endif()
@@ -62,3 +62,9 @@ if(WIN32 AND BUILD_TESTING)
  target_link_libraries(cursor_test PRIVATE d3d11 dxgi d3dcompiler)
  add_test(NAME desktop_cursor COMMAND cursor_test)
 endif()
+
+foreach(cast_ui_target Furina black_ui_test)
+ if(TARGET ${cast_ui_target})
+  target_sources(${cast_ui_target} PRIVATE core/cast_ui_state.cpp core/cast_ui_state.h)
+ endif()
+endforeach()
