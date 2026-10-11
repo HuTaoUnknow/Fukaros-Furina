@@ -92,8 +92,8 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_furina_black_FurinaActivity_nativ
  QByteArray data(n,Qt::Uninitialized);env->GetByteArrayRegion(array,0,n,reinterpret_cast<jbyte*>(data.data()));fr_video_info info{};if(!fr_video_read(reinterpret_cast<const uint8_t*>(data.constData()),n,&info)){--bridge->videoPending;return false;}
  auto *b=bridge;QMetaObject::invokeMethod(b,[b,data]{emit b->video(data);--b->videoPending;},Qt::QueuedConnection);return true;
 }
-extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeVideoStats(JNIEnv*,jclass,jboolean sender,jdouble fps,jdouble work,jint queue,jdouble displayed,jint w,jint h){
- QMutexLocker lock(&bridgeMutex);if(!bridge)return;auto *b=bridge;QMetaObject::invokeMethod(b,[b,sender,fps,work,queue,displayed,w,h]{emit b->videoStats(sender,fps,work,unsigned(qMax(0,queue)),displayed,w,h);},Qt::QueuedConnection);
+extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeVideoStats(JNIEnv*,jclass,jboolean sender,jdouble fps,jdouble work,jint queue,jdouble displayed,jint w,jint h,jlong elapsed){
+ QMutexLocker lock(&bridgeMutex);if(!bridge)return;auto *b=bridge;QMetaObject::invokeMethod(b,[b,sender,fps,work,queue,displayed,w,h,elapsed]{emit b->videoStats(sender,fps,work,unsigned(qMax(0,queue)),displayed,w,h,unsigned(qBound(jlong(0),elapsed,jlong(60000))));},Qt::QueuedConnection);
 }
 extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeNeedKey(JNIEnv*,jclass){QMutexLocker lock(&bridgeMutex);if(!bridge)return;auto *b=bridge;QMetaObject::invokeMethod(b,[b]{emit b->needKey();},Qt::QueuedConnection);}
 extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeExitFullscreen(JNIEnv*,jclass){QMutexLocker lock(&bridgeMutex);if(!bridge)return;auto *b=bridge;QMetaObject::invokeMethod(b,[b]{emit b->exitFullscreen();},Qt::QueuedConnection);}

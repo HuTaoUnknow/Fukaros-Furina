@@ -80,7 +80,7 @@ public final class VideoCore {
                         packet.putInt(key?KEY:0).putInt(++sequence).putInt(width).putInt(height).putLong(info.presentationTimeUs).putInt(epoch).putInt(1).put(body);
                         if(!FurinaActivity.nativeVideo(packet.array()))requestKey();
                         else ++frames;
-                        long now=SystemClock.elapsedRealtime();if(now-sample>=1000){FurinaActivity.nativeVideoStats(true,frames*1000.0/(now-sample),frames==0?0:gpuWorkNs/1000000.0/frames,0,0,width,height);frames=0;gpuWorkNs=0;sample=now;}
+                        long now=SystemClock.elapsedRealtime();if(now-sample>=1000){FurinaActivity.nativeVideoStats(true,frames*1000.0/(now-sample),frames==0?0:gpuWorkNs/1000000.0/frames,0,0,width,height,now-sample);frames=0;gpuWorkNs=0;sample=now;}
                     }catch(Exception e){FurinaActivity.nativeStatus("视频编码帧失败："+e);}
                     finally{try{c.releaseOutputBuffer(index,false);}catch(Exception ignored){}}
                 }
@@ -167,6 +167,6 @@ public final class VideoCore {
             }catch(Exception e){FurinaActivity.nativeStatus("视频解码失败："+e);close();synchronized(queue){queue.clear();waitKey=true;scheduled=false;}FurinaActivity.nativeNeedKey();}
         }
         void drain(){if(codec==null)return;MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int index;while((index=codec.dequeueOutputBuffer(info,0))>=0){long now=System.nanoTime();if(firstPts<0){firstPts=info.presentationTimeUs;renderAnchor=now+50000000L;}long deadline=renderAnchor+(info.presentationTimeUs-firstPts)*1000L;if(deadline<now){renderAnchor+=now+16666666L-deadline;deadline=now+16666666L;}if(deadline>now+150000000L){firstPts=info.presentationTimeUs;renderAnchor=now+50000000L;deadline=renderAnchor;}codec.releaseOutputBuffer(index,deadline);++frames;}}
-        void statistics(){long now=SystemClock.elapsedRealtime(),elapsed=now-sample;if(elapsed>0){int count=presented.getAndSet(0),pending;synchronized(queue){pending=queue.size();}if(codec!=null)FurinaActivity.nativeVideoStats(false,frames*1000.0/elapsed,frames==0?0:workNs/1000000.0/frames,pending*1000/FPS,count*1000.0/elapsed,width,height);frames=0;workNs=0;sample=now;}handler.postDelayed(this::statistics,1000);}
+        void statistics(){long now=SystemClock.elapsedRealtime(),elapsed=now-sample;if(elapsed>0){int count=presented.getAndSet(0),pending;synchronized(queue){pending=queue.size();}if(codec!=null)FurinaActivity.nativeVideoStats(false,frames*1000.0/elapsed,frames==0?0:workNs/1000000.0/frames,pending*1000/FPS,count*1000.0/elapsed,width,height,elapsed);frames=0;workNs=0;sample=now;}handler.postDelayed(this::statistics,1000);}
     }
 }

@@ -19,6 +19,6 @@ signals:
  void status(const QString &message);
  void captureStopped();
  void video(const QByteArray &packet);
- void videoStats(bool sender,double fps,double workMs,unsigned queueMs,double displayedFps,int width,int height);
+ void videoStats(bool sender,double fps,double workMs,unsigned queueMs,double displayedFps,int width,int height,unsigned elapsedMs=1000);
  void needKey();void exitFullscreen();
 };

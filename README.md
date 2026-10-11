@@ -18,8 +18,8 @@ Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
 
 在 [Releases](https://github.com/HuTaoUnknow/Fukaros-Furina/releases) 下载同一版本的两端安装包：
 
-- `Fukaros-0.4.3-windows-x64-setup.exe`：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、ADB 和扩展屏驱动文件，有快捷方式和卸载入口。
-- `Furina-0.4.3-android-arm64.apk`：Android 9 及以上 ARM64 APK。保留旧移动端 `com.furina.black` 的包标识，名称显示为 Furina，当前预览包沿用测试签名以支持覆盖安装。
+- `Fukaros-0.4.4-windows-x64-setup.exe`：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、ADB 和扩展屏驱动文件，有快捷方式和卸载入口。
+- `Furina-0.4.4-android-arm64.apk`：Android 9 及以上 ARM64 APK。保留旧移动端 `com.furina.black` 的包标识，名称显示为 Furina，当前预览包沿用测试签名以支持覆盖安装。
 - `SHA256SUMS.txt`：安装包校验值。
 
 ## 使用

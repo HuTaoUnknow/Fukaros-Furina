@@ -1,7 +1,7 @@
 #include <windows.h>
 1 VERSIONINFO
-FILEVERSION 0,4,3,0
-PRODUCTVERSION 0,4,3,0
+FILEVERSION 0,4,4,0
+PRODUCTVERSION 0,4,4,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0
 FILEOS VOS_NT_WINDOWS32
@@ -14,11 +14,11 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "HuTaoUnknow\0"
    VALUE "FileDescription", "Fukaros desktop screen sharing\0"
-   VALUE "FileVersion", "0.4.3\0"
+   VALUE "FileVersion", "0.4.4\0"
    VALUE "InternalName", "Fukaros\0"
    VALUE "OriginalFilename", "Fukaros.exe\0"
    VALUE "ProductName", "Fukaros\0"
-   VALUE "ProductVersion", "0.4.3\0"
+   VALUE "ProductVersion", "0.4.4\0"
   END
  END
  BLOCK "VarFileInfo"

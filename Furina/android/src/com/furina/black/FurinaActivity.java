@@ -18,7 +18,7 @@ public class FurinaActivity extends QtActivity {
     public static native void nativeStatus(String text);
     public static native void nativeStopped();
     public static native boolean nativeVideo(byte[] packet);
-    public static native void nativeVideoStats(boolean sender,double fps,double workMs,int queueMs,double displayedFps,int width,int height);
+    public static native void nativeVideoStats(boolean sender,double fps,double workMs,int queueMs,double displayedFps,int width,int height,long elapsedMs);
     public static native void nativeNeedKey();
     public static native void nativeExitFullscreen();
     public static FurinaActivity currentActivity(){return current;}

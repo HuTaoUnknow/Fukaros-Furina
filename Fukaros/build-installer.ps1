@@ -5,4 +5,4 @@ if(!(Test-Path (Join-Path $packageDir 'Fukaros.exe'))){throw 'Run build-desktop.
 $outputDir=Join-Path $PSScriptRoot 'dist'
 & $Iscc "/DPackageDir=$packageDir" "/DOutputDir=$outputDir" (Join-Path $PSScriptRoot 'packaging\Fukaros.iss')
 if($LASTEXITCODE){throw 'Installer compilation failed'}
-Get-Item (Join-Path $outputDir 'Fukaros-0.4.3-windows-x64-setup.exe')
+Get-Item (Join-Path $outputDir 'Fukaros-0.4.4-windows-x64-setup.exe')

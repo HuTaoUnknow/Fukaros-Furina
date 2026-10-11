@@ -37,10 +37,10 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  });
  connect(&m_android,&AndroidBridge::needKey,this,[this]{m_peer.sendSession(FR_REQUEST_KEY);});
  connect(&m_android,&AndroidBridge::exitFullscreen,this,[this]{m_presentation->setActive(false);updateVideoGeometry();});
- connect(&m_android,&AndroidBridge::videoStats,this,[this](bool sender,double fps,double ms,unsigned queue,double shown,int w,int h){
+ connect(&m_android,&AndroidBridge::videoStats,this,[this](bool sender,double fps,double ms,unsigned queue,double shown,int w,int h,unsigned sampleMs){
   if(sender)log(QString("平板编码：%1 FPS，GPU 处理 %2 ms，%3×%4，目标 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h),QString("Tablet encode: %1 FPS, GPU processing %2 ms, %3x%4, target 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h));
   else log(QString("平板解码：%1 FPS，显示 %2 FPS，%3×%4，目标 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h),QString("Tablet decode: %1 FPS, display %2 FPS, %3x%4, target 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h));
-  if(sender){const auto sampleMs=uint32_t(qMin<qint64>(60000,m_policySample.restart()));m_encodeWorkMs=ms;if(fr_video_policy_sample_elapsed(&m_videoPolicy,qMin(fps,m_remoteFps),qMax(ms+(ui->receive->isChecked()?m_decodeWorkMs:0),m_remoteWorkMs),qMax(m_peer.videoQueueMs(),m_remoteQueue),sampleMs)){m_android.setCaptureResolution(m_videoPolicy.edge);log(QString("自动清晰度：最长边 %1").arg(m_videoPolicy.edge),QString("Auto resolution: max edge %1").arg(m_videoPolicy.edge));}}else {m_decodeWorkMs=ms;m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);}
+  if(sender){m_encodeWorkMs=ms;if(fr_video_policy_sample_elapsed(&m_videoPolicy,qMin(fps,m_remoteFps),qMax(ms+(ui->receive->isChecked()?m_decodeWorkMs:0),m_remoteWorkMs),qMax(m_peer.videoQueueMs(),m_remoteQueue),sampleMs)){m_android.setCaptureResolution(m_videoPolicy.edge);log(QString("自动清晰度：最长边 %1").arg(m_videoPolicy.edge),QString("Auto resolution: max edge %1").arg(m_videoPolicy.edge));}}else {m_decodeWorkMs=ms;m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);}
  });
  connect(&m_videoReceiver,&DesktopVideoReceiver::frameReady,this,[this]{QImage image;if(m_videoReceiver.takeImage(&image)&&m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked())m_view->setImage(image);});
  connect(&m_videoReceiver,&DesktopVideoReceiver::recover,this,[this]{m_peer.sendSession(FR_REQUEST_KEY);});
@@ -106,7 +106,7 @@ void MainWindow::start(){
  m_pending=true;m_castUi->lockPending();log("开始等待对端同意。","Starting: waiting for the other device to approve.");log("服务已启动，等待电脑连接。","Service started. Waiting for the PC connection.");
 }
 void MainWindow::stop(){m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close();m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);}
-void MainWindow::startCapture(){if(!m_peer.ready()||m_sharing||!m_consent->active()||!m_consent->sharing())return;m_sharing=true;m_policySample.start();m_remoteFps=60;m_remoteQueue=0;m_remoteWorkMs=0;m_encodeWorkMs=0;fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);m_android.startCapture();log("正在请求平板录屏授权。","Requesting tablet screen capture permission.");}
+void MainWindow::startCapture(){if(!m_peer.ready()||m_sharing||!m_consent->active()||!m_consent->sharing())return;m_sharing=true;m_remoteFps=60;m_remoteQueue=0;m_remoteWorkMs=0;m_encodeWorkMs=0;fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);m_android.startCapture();log("正在请求平板录屏授权。","Requesting tablet screen capture permission.");}
 void MainWindow::stopCapture(){m_sharing=false;m_android.wantFrame=false;m_android.stopCapture();}
 void MainWindow::directionChanged(){
  if(m_castUi->locked()){m_castUi->preserveSelection();return;}
