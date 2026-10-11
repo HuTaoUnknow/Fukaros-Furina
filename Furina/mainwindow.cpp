@@ -13,13 +13,13 @@
 MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindow),cfg(new Ui::SettingsDialog),m_settings(new QDialog(this)),m_peer(this),m_android(this){
  ui->setupUi(this);cfg->setupUi(m_settings);cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");setStyleSheet(furinaStyle());furinaConfigureToolIcons(ui->settings,ui->maximize);setWindowTitle("Furina · 平板端");resize(1100,680);
  m_view=new ScreenView(this);ui->viewLayout->addWidget(m_view);m_presentation=new Presentation(this,ui->sidebar,ui->bottomPanel,m_view);m_resolution=new ResolutionChoice(this);
-m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_castUi=new CastUiState(this);
+m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_castUi=new CastUiState(this);m_castControl=new CastControl(this,m_castUi,&m_peer);
  connect(m_consent,&SessionConsent::status,this,[this](const QString &cn,const QString &en){log(cn,en);});
- connect(m_consent,&SessionConsent::incoming,this,[this]{m_castUi->lockPending();m_pending=false;m_presentation->setActive(false);ui->start->setEnabled(false);});
+ connect(m_consent,&SessionConsent::incoming,this,[this]{m_castUi->lockPending();m_pending=false;m_presentation->setActive(false);});
  connect(m_consent,&SessionConsent::ended,this,&MainWindow::endSession);
  connect(m_consent,&SessionConsent::approved,this,[this](bool sharing,bool extended,bool initiatedHere){
   m_castUi->occupy(sharing,extended);log("投屏方式已锁定，仅清晰度可调整；点击停止后可修改方式。","Casting options are locked; resolution can still change. Press Stop to change the casting mode.");m_pending=false;m_direction->setSharing(sharing);{const QSignalBlocker a(ui->duplicate),b(ui->extend);(extended?ui->extend:ui->duplicate)->setChecked(true);}
-  ui->modePanel->setVisible(!sharing);m_sessionActive=true;ui->start->setEnabled(false);
+  ui->modePanel->setVisible(!sharing);m_sessionActive=true;
   updateVideoGeometry();
   if(initiatedHere)applyDirection();
  });
@@ -28,7 +28,7 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  connect(&m_peer,&Peer::profile,this,[this](int edge){const QSignalBlocker block(m_resolution);m_resolution->setValue(edge);fr_video_policy_init(&m_videoPolicy,edge);m_android.setCaptureResolution(m_videoPolicy.edge);saveSettings();});
  connect(&m_peer,&Peer::feedback,this,[this](double fps,double ms,unsigned queue,double shown){m_remoteWorkMs=ms;m_remoteFps=qMin(fps,shown);m_remoteQueue=queue;});
  connect(&m_android,&AndroidBridge::video,this,[this](const QByteArray &packet){if(m_sharing&&m_consent->active()&&m_consent->sharing()&&!m_peer.sendVideo(packet))m_android.requestKeyframe();});
- connect(&m_peer,&Peer::video,this,[this](const QByteArray &packet){if(!m_consent->active()||m_consent->sharing()||!ui->receive->isChecked())return;m_videoVisible=true;m_sessionActive=true;ui->start->setEnabled(false);
+ connect(&m_peer,&Peer::video,this,[this](const QByteArray &packet){if(!m_consent->active()||m_consent->sharing()||!ui->receive->isChecked())return;m_videoVisible=true;m_sessionActive=true;
 #ifdef Q_OS_ANDROID
  m_android.receiveVideo(packet);updateVideoGeometry();
 #else
@@ -38,10 +38,9 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  connect(&m_android,&AndroidBridge::needKey,this,[this]{m_peer.sendSession(FR_REQUEST_KEY);});
  connect(&m_android,&AndroidBridge::exitFullscreen,this,[this]{m_presentation->setActive(false);updateVideoGeometry();});
  connect(&m_android,&AndroidBridge::videoStats,this,[this](bool sender,double fps,double ms,unsigned queue,double shown,int w,int h){
-  ui->performanceHint->setText(QString("%1 %2 FPS · %3×%4").arg(sender?"发送":"显示").arg(sender?fps:shown,0,'f',1).arg(w).arg(h));
   if(sender)log(QString("平板编码：%1 FPS，GPU 处理 %2 ms，%3×%4，目标 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h),QString("Tablet encode: %1 FPS, GPU processing %2 ms, %3x%4, target 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h));
   else log(QString("平板解码：%1 FPS，显示 %2 FPS，%3×%4，目标 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h),QString("Tablet decode: %1 FPS, display %2 FPS, %3x%4, target 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h));
-  if(sender){m_encodeWorkMs=ms;if(fr_video_policy_sample(&m_videoPolicy,qMin(fps,m_remoteFps),qMax(ms+(ui->receive->isChecked()?m_decodeWorkMs:0),m_remoteWorkMs),qMax(m_peer.videoQueueMs(),m_remoteQueue)))m_android.setCaptureResolution(m_videoPolicy.edge);}else {m_decodeWorkMs=ms;m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);}
+  if(sender){const auto sampleMs=uint32_t(qMin<qint64>(60000,m_policySample.restart()));m_encodeWorkMs=ms;if(fr_video_policy_sample_elapsed(&m_videoPolicy,qMin(fps,m_remoteFps),qMax(ms+(ui->receive->isChecked()?m_decodeWorkMs:0),m_remoteWorkMs),qMax(m_peer.videoQueueMs(),m_remoteQueue),sampleMs))m_android.setCaptureResolution(m_videoPolicy.edge);}else {m_decodeWorkMs=ms;m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);}
  });
  connect(&m_videoReceiver,&DesktopVideoReceiver::frameReady,this,[this]{QImage image;if(m_videoReceiver.takeImage(&image)&&m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked())m_view->setImage(image);});
  connect(&m_videoReceiver,&DesktopVideoReceiver::recover,this,[this]{m_peer.sendSession(FR_REQUEST_KEY);});
@@ -55,7 +54,7 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  QSettings s;if(s.value("token").toString().size()<6)s.setValue("token",QString::number(QRandomGenerator::system()->bounded(100000000,999999999)));
  loadSettings();QStringList ips;for(const auto &address:QNetworkInterface::allAddresses())if(address.protocol()==QAbstractSocket::IPv4Protocol&&!address.isLoopback())ips<<address.toString();cfg->addresses->setText("本机局域网 IP："+ips.join(", ")+"\nUSB / Wi-Fi · TCP 27183");
  auto *modeGroup=new QButtonGroup(this);modeGroup->addButton(ui->duplicate);modeGroup->addButton(ui->extend);modeGroup->setExclusive(true);if(s.value("castMode",0).toInt()==1)ui->extend->setChecked(true);
- connect(ui->start,&QPushButton::clicked,this,&MainWindow::start);connect(ui->stop,&QPushButton::clicked,this,&MainWindow::stop);
+ connect(m_castControl,&CastControl::startRequested,this,&MainWindow::start);connect(m_castControl,&CastControl::stopRequested,this,&MainWindow::stop);
  connect(ui->settings,&QPushButton::clicked,this,&MainWindow::openSettings);connect(ui->maximize,&QPushButton::clicked,this,&MainWindow::maximize);
  connect(m_presentation,&Presentation::changed,this,[this](bool on){furinaSetMaximizeIcon(ui->maximize,on||m_remoteMax);});
  connect(m_direction,&DirectionChoice::changed,this,&MainWindow::directionChanged);
@@ -65,7 +64,7 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  connect(cfg->accessibility,&QPushButton::clicked,&m_android,&AndroidBridge::accessibility);
  connect(&m_peer,&Peer::status,this,[this](const QString &message){log(message);});
  connect(&m_android,&AndroidBridge::status,this,[this](const QString &message){log(message);m_peer.sendStatus(message);});
- connect(&m_peer,&Peer::frame,this,[this](const QImage &image){if(m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked()){m_view->setImage(image);m_sessionActive=true;ui->start->setEnabled(false);}});
+ connect(&m_peer,&Peer::frame,this,[this](const QImage &image){if(m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked()){m_view->setImage(image);m_sessionActive=true;}});
  connect(&m_android,&AndroidBridge::jpeg,this,[this](const QByteArray &jpeg){if(m_sharing&&m_consent->active()&&m_consent->sharing())m_peer.sendJpeg(jpeg);});
  connect(&m_peer,&Peer::session,this,&MainWindow::session);
  connect(&m_peer,&Peer::gesture,this,[this](fr_gesture gesture){if(cfg->allowControl->isChecked())m_android.gesture(gesture);else m_peer.sendStatus(furinaStatus("平板未允许远程控制","Remote control is not allowed on the tablet"));});
@@ -75,8 +74,8 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
   // The PC initiates a direction immediately. If it doesn't, honour a pending tablet Start.
   QTimer::singleShot(500,this,[this]{if(m_pending&&m_peer.ready()){m_pending=false;requestDirection();}});
  });
- connect(&m_peer,&Peer::disconnected,this,[this]{m_castUi->connectionLost();if(m_castUi->occupied())log("连接已中断，请点击停止释放投屏方式。","Connection lost. Press Stop to unlock casting options.");stopCapture();m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_pending=false;m_sessionActive=false;m_remoteMax=false;m_presentation->setActive(false);furinaSetMaximizeIcon(ui->maximize,false);ui->start->setEnabled(!m_castUi->locked());m_view->setImage({});});
- connect(&m_android,&AndroidBridge::captureStopped,this,[this]{if(!m_sharing)return;stopCapture();m_sessionActive=false;ui->start->setEnabled(!m_castUi->locked());m_peer.sendSession(FR_STOP_SHARE);});
+ connect(&m_peer,&Peer::disconnected,this,[this]{m_castUi->connectionLost();if(m_castUi->occupied())log("连接已中断，请点击停止释放投屏方式。","Connection lost. Press Stop to unlock casting options.");stopCapture();m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_pending=false;m_sessionActive=false;m_remoteMax=false;m_presentation->setActive(false);furinaSetMaximizeIcon(ui->maximize,false);m_view->setImage({});});
+ connect(&m_android,&AndroidBridge::captureStopped,this,[this]{if(!m_sharing)return;stopCapture();m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);});
  m_tick.setTimerType(Qt::PreciseTimer);m_tick.setInterval(16);connect(&m_tick,&QTimer::timeout,this,[this]{m_android.wantFrame=m_sharing&&m_peer.ready();updateVideoGeometry();
 #ifndef Q_OS_ANDROID
   if(m_sharing&&m_peer.canSendFrame()){auto *screen=QGuiApplication::primaryScreen();if(screen)m_peer.sendFrame(screen->grabWindow(0).toImage());}
@@ -104,21 +103,21 @@ void MainWindow::start(){
  if(m_peer.ready()){m_pending=false;requestDirection();return;}
  if(cfg->token->text().size()<6){log("请填写至少 6 位的配对码。","Enter a pairing code with at least 6 characters.");openSettings();return;}
  if(!m_listening){m_listening=m_peer.listen(27183,cfg->token->text(),cfg->host->text());if(!m_listening)return;saveSettings();}
- m_pending=true;m_castUi->lockPending();ui->start->setEnabled(false);log("开始等待对端同意。","Starting: waiting for the other device to approve.");log("服务已启动，等待电脑连接。","Service started. Waiting for the PC connection.");
+ m_pending=true;m_castUi->lockPending();log("开始等待对端同意。","Starting: waiting for the other device to approve.");log("服务已启动，等待电脑连接。","Service started. Waiting for the PC connection.");
 }
-void MainWindow::stop(){m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close();m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});ui->start->setEnabled(!m_castUi->locked());furinaSetMaximizeIcon(ui->maximize,false);}
-void MainWindow::startCapture(){if(!m_peer.ready()||m_sharing||!m_consent->active()||!m_consent->sharing())return;m_sharing=true;m_remoteFps=60;m_remoteQueue=0;m_remoteWorkMs=0;m_encodeWorkMs=0;fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);m_android.startCapture();log("正在请求平板录屏授权。","Requesting tablet screen capture permission.");}
+void MainWindow::stop(){m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close();m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);}
+void MainWindow::startCapture(){if(!m_peer.ready()||m_sharing||!m_consent->active()||!m_consent->sharing())return;m_sharing=true;m_policySample.start();m_remoteFps=60;m_remoteQueue=0;m_remoteWorkMs=0;m_encodeWorkMs=0;fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);m_android.startCapture();log("正在请求平板录屏授权。","Requesting tablet screen capture permission.");}
 void MainWindow::stopCapture(){m_sharing=false;m_android.wantFrame=false;m_android.stopCapture();}
 void MainWindow::directionChanged(){
  if(m_castUi->locked()){m_castUi->preserveSelection();return;}
- ui->modePanel->setVisible(ui->receive->isChecked());ui->castHint->setText("复制电脑画面，或获取独立第二桌面。\n扩展需要电脑有第二块或虚拟显示器。");
+ ui->modePanel->setVisible(ui->receive->isChecked());
  m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_view->setImage({});m_presentation->setActive(false);if(m_remoteMax){m_peer.sendSession(FR_RESTORE);m_remoteMax=false;furinaSetMaximizeIcon(ui->maximize,false);}
- if(m_sessionActive||m_pending||m_consent->pending())stop();m_sessionActive=false;ui->start->setEnabled(!m_castUi->locked());
+ if(m_sessionActive||m_pending||m_consent->pending())stop();m_sessionActive=false;
 }
-void MainWindow::endSession(){m_castUi->reset();stopCapture();m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_view->setImage({});m_presentation->setActive(false);m_pending=false;m_sessionActive=false;m_remoteMax=false;ui->start->setEnabled(!m_castUi->locked());furinaSetMaximizeIcon(ui->maximize,false);}
+void MainWindow::endSession(){m_castUi->reset();stopCapture();m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_view->setImage({});m_presentation->setActive(false);m_pending=false;m_sessionActive=false;m_remoteMax=false;furinaSetMaximizeIcon(ui->maximize,false);}
 void MainWindow::requestDirection(){
  if(m_castUi->occupied())return;
- if(m_consent->request(m_direction->sharing(),ui->extend->isChecked())){m_pending=false;m_castUi->lockPending();ui->start->setEnabled(false);}
+ if(m_consent->request(m_direction->sharing(),ui->extend->isChecked())){m_pending=false;m_castUi->lockPending();}
 }
 void MainWindow::applyDirection(){
  if(!m_consent->active())return;
@@ -126,13 +125,13 @@ void MainWindow::applyDirection(){
  m_peer.sendSession(ui->share->isChecked()?FR_START_RECEIVE:FR_STOP_RECEIVE);
  if(ui->share->isChecked())startCapture();else stopCapture();
  if(ui->receive->isChecked()){m_peer.sendSession(ui->extend->isChecked()?FR_EXTEND:FR_DUPLICATE);m_peer.sendSession(FR_START_SHARE);log("已请求电脑屏幕，等待画面。","Requested the PC screen. Waiting for frames.");}else m_peer.sendSession(FR_STOP_SHARE);
- ui->start->setEnabled(!m_castUi->locked()&&!m_sessionActive);
+
 }
 void MainWindow::session(quint32 action){
  if(action==FR_REQUEST_KEY){if(m_sharing)m_android.requestKeyframe();}
- else if(action==FR_START_SHARE){if(!m_consent->active()||!m_consent->sharing())return;m_pending=false;m_sessionActive=true;startCapture();ui->start->setEnabled(false);}
+ else if(action==FR_START_SHARE){if(!m_consent->active()||!m_consent->sharing())return;m_pending=false;m_sessionActive=true;startCapture();}
  else if(action==FR_STOP_SHARE){stopCapture();}
- else if(action==FR_START_RECEIVE){if(!m_consent->active()||m_consent->sharing())return;m_pending=false;m_sessionActive=true;ui->start->setEnabled(false);}
+ else if(action==FR_START_RECEIVE){if(!m_consent->active()||m_consent->sharing())return;m_pending=false;m_sessionActive=true;}
  else if(action==FR_STOP_RECEIVE){m_view->setImage({});m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();}
  else if(action==FR_DUPLICATE||action==FR_EXTEND){if(m_castUi->occupied()&&ui->extend->isChecked()!=(action==FR_EXTEND)){log("投屏方式已锁定，忽略会话中的模式更改。","Casting options are locked. Ignoring an in-session mode change.");return;}if(!m_consent->active()||m_consent->sharing())return;const QSignalBlocker a(ui->duplicate),b(ui->extend);(action==FR_EXTEND?ui->extend:ui->duplicate)->setChecked(true);}
  else if(action==FR_MAXIMIZE||action==FR_RESTORE){if((m_consent->active()&&!m_consent->sharing())||action==FR_RESTORE)m_presentation->setActive(action==FR_MAXIMIZE);}

@@ -19,6 +19,8 @@ public:
  void reset();
  void connectionLost();
  void preserveSelection();
+signals:
+ void changed();
 private:
  QCheckBox *m_share,*m_receive,*m_duplicate,*m_extend;
  ScreenView *m_view;QWidget *m_window;QPushButton *m_save;SessionConsent *m_consent;

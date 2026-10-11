@@ -5,20 +5,33 @@ int fr_resolution_valid(uint32_t edge){return edge==0||edge==720||edge==1080||ed
 int fr_video_bitrate(int width,int height){
  int64_t rate=(int64_t)width*height*10;return (int)(rate<6000000?6000000:(rate>28000000?28000000:rate));
 }
-void fr_video_policy_init(fr_video_policy *p,int selected){memset(p,0,sizeof(*p));p->selected=fr_resolution_valid(selected)?selected:0;p->edge=p->selected?p->selected:1080;p->ceiling=1920;p->cooldown=3;}
-int fr_video_policy_sample(fr_video_policy *p,double fps,double work_ms,unsigned queue_ms){
- if(p->selected)return 0;
- // Ignore decoder warm-up and short layout/key-frame disturbances. Once a rung
- // proves unsustainable, don't probe it repeatedly in the same auto session.
- if(p->cooldown>0){--p->cooldown;p->bad=p->good=p->severe=0;return 0;}
- const double ratio=p->edge==720?1.5:(1920.0/1080.0);
- const int headroom=work_ms*ratio*ratio<=14.0;
- if(fps<45.0||work_ms>25.0||queue_ms>120)++p->severe;else p->severe=0;
- if(fps<59.0||work_ms>16.0||queue_ms>50){++p->bad;p->good=0;}else if(fps>=59.5&&work_ms<10.0&&headroom&&queue_ms<20){++p->good;p->bad=p->severe=0;}else{p->bad=p->good=0;}
- if((p->bad>=5||p->severe>=2)&&p->edge>720){p->edge=p->edge==1920?1080:720;p->ceiling=p->edge;p->bad=p->good=p->severe=0;p->cooldown=15;return 1;}
- if(p->good>=30&&p->edge<p->ceiling){p->edge=p->edge==720?1080:1920;p->bad=p->good=p->severe=0;p->cooldown=10;return 1;}
+void fr_video_policy_init(fr_video_policy *p,int selected){memset(p,0,sizeof(*p));p->selected=fr_resolution_valid(selected)?selected:0;p->edge=p->selected?p->selected:1080;}
+static uint32_t elapsed_add(uint32_t value,uint32_t elapsed){return elapsed>UINT32_MAX-value?UINT32_MAX:value+elapsed;}
+int fr_video_policy_sample_elapsed(fr_video_policy *p,double fps,double work_ms,unsigned queue_ms,uint32_t elapsed_ms){
+ (void)work_ms;(void)queue_ms;
+ if(p->selected||!elapsed_ms)return 0;
+ p->retry_ms=p->retry_ms>elapsed_ms?p->retry_ms-elapsed_ms:0;
+ // Only sustained measured frame loss lowers quality. A slow key frame, a
+ // work-time spike, or queued packets alone must not change the resolution.
+ if(fps<50.0){
+  p->low_ms=elapsed_add(p->low_ms,elapsed_ms);p->stable_ms=0;
+  if(p->low_ms>=5000&&p->edge>720){
+   p->edge=p->edge>1440?1440:p->edge>1080?1080:720;
+   p->low_ms=p->stable_ms=0;p->retry_ms=10000;return 1;
+  }
+  return 0;
+ }
+ p->low_ms=0;
+ p->stable_ms=fps>=59.0?elapsed_add(p->stable_ms,elapsed_ms):0;
+ // Probe progressively, including retrying higher rungs after recovery.
+ // Ten seconds after a downgrade avoids immediately repeating a failed probe.
+ if(p->stable_ms>=5000&&!p->retry_ms&&p->edge<1920){
+  p->edge=p->edge<1080?1080:p->edge<1440?1440:1920;
+  p->low_ms=p->stable_ms=0;return 1;
+ }
  return 0;
 }
+int fr_video_policy_sample(fr_video_policy *p,double fps,double work_ms,unsigned queue_ms){return fr_video_policy_sample_elapsed(p,fps,work_ms,queue_ms,1000);}
 void fr_video_dimensions(int w,int h,int edge,int *out_w,int *out_h){
  if(w<2||h<2){*out_w=*out_h=0;return;}
  const int max=w>h?w:h;double scale=max>edge?(double)edge/max:1.0;

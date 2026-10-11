@@ -7,6 +7,8 @@ Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
 - 同一时间只使用一个方向；对端点击“同意”后才开始采集与传输。
 - 投屏期间锁定方向、复制 / 扩展和连接设置，清晰度可实时调整。发送端空闲画面区显示“占用中...”；点击停止后恢复选择，意外断线仍须先停止。
 - 设置分别提供 USB 有线和 Wi-Fi 无线参数页，配对码共用。
+- 两端使用一个圆形状态按钮：开始 ▶、等待转圈、连接后停止 ‖。等待时点击可取消，连接后点击可结束连接与投屏。
+- 移动端用分割线分开方向、复制 / 扩展和清晰度，选择区不显示说明文字；状态和性能详情保留在调试区。
 - 电脑分享支持 **复制 / 扩展**。扩展通过 Windows 虚拟显示驱动创建独立桌面，窗口可拖到平板对应的屏幕。
 - 分辨率支持 **1920 / 1080 / 720 / 自动**，数字为最长边像素。默认自动，以 60 FPS 为目标，并过滤短时波动。
 - 支持远程点击、滑动、长按及 Android 返回 / 主页 / 最近任务。
@@ -16,8 +18,8 @@ Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
 
 在 [Releases](https://github.com/HuTaoUnknow/Fukaros-Furina/releases) 下载同一版本的两端安装包：
 
-- `Fukaros-0.4.1-windows-x64-setup.exe`：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、ADB 和扩展屏驱动文件，有快捷方式和卸载入口。
-- `Furina-0.4.1-android-arm64.apk`：Android 9 及以上 ARM64 APK。保留旧移动端 `com.furina.black` 的包标识，名称显示为 Furina，当前预览包沿用测试签名以支持覆盖安装。
+- `Fukaros-0.4.2-windows-x64-setup.exe`：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、ADB 和扩展屏驱动文件，有快捷方式和卸载入口。
+- `Furina-0.4.2-android-arm64.apk`：Android 9 及以上 ARM64 APK。保留旧移动端 `com.furina.black` 的包标识，名称显示为 Furina，当前预览包沿用测试签名以支持覆盖安装。
 - `SHA256SUMS.txt`：安装包校验值。
 
 ## 使用
@@ -84,7 +86,7 @@ pwsh -File .\Furina\build-android.ps1 -QtRoot C:\Qt -Sdk C:\Android\Sdk -Ndk C:\
 
 Windows 使用 DXGI、GPU 缩放、NVENC H.264；没有可用 NVIDIA 编码器时回退至 Media Foundation。Windows 接收侧使用 FFmpeg / D3D11VA；Android 使用 MediaProjection、GPU 60 Hz 采样、MediaCodec Surface 编解码。
 
-自动分辨率从 1080 开始：三秒预热，持续拥堵才降档，稳定三十秒且有余量才升档；同一会话避免反复试探已经无法稳定运行的高档位。关键帧和 QP 策略尽量降低画质突变。目标 60 FPS，实际帧率受硬件、Wi-Fi 和分辨率影响，不保证所有环境恒定 60 FPS。
+自动分辨率从 1080 开始，以实际编码、接收和显示帧率中的较低值评估：达到 59 FPS 及以上连续 5 秒，按 1080 → 1440 → 1920 逐档试探，1920 为目前最高档。只有低于 50 FPS 连续累计 5 秒才下降一档，恢复到 50 FPS 会清除降档计时。降档后至少观察 10 秒再尝试升档，恢复后可继续探测高档位；编码耗时或队列波动不会单独触发降档。关键帧和 QP 策略尽量降低画质突变。目标 60 FPS，实际帧率受硬件、Wi-Fi 和分辨率影响，不保证所有环境恒定 60 FPS。
 
 局域网视频尚未使用 TLS，配对码通过 HMAC-SHA256 进行认证；只在可信局域网使用。不支持声音、剪贴板、多点触控或完整键盘输入。受保护的 Android 窗口可能黑屏。ADB PNG 预览只用于低帧率调试。
 

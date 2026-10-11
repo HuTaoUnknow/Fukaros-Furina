@@ -99,10 +99,8 @@ QString furinaStyle(){return QStringLiteral(R"(
  QPushButton:hover { background:#33465d; }
  QPushButton:pressed { background:#406184; }
  QPushButton:disabled { color:#768393; border-color:#283542; }
- QPushButton#start { background:#216e89; border-color:#358eaa; }
- QPushButton#stop { background:#58323e; border-color:#845064; }
- QPushButton#start,QPushButton#stop,QPushButton#settings,QPushButton#maximize { min-height:36px; padding:6px 0px; }
- QPushButton#start,QPushButton#stop,QPushButton#settings,QPushButton#maximize { min-width:38px; min-height:38px; max-width:38px; max-height:38px; padding:0px; border-radius:20px; font-size:12px; }
+ QPushButton#start,QPushButton#settings,QPushButton#maximize { min-height:36px; padding:6px 0px; }
+ QPushButton#start,QPushButton#settings,QPushButton#maximize { min-width:38px; min-height:38px; max-width:38px; max-height:38px; padding:0px; border-radius:20px; font-size:12px; }
  QPushButton#exitFullScreen { background:#253344; }
  QWidget#windowControls { background:#17212c; }
  QWidget#windowControls QPushButton { min-width:32px; max-width:32px; min-height:26px; max-height:26px; padding:0; border:0; border-radius:0; }
@@ -113,6 +111,7 @@ QString furinaStyle(){return QStringLiteral(R"(
  QLabel#performanceHint { color:#98afc6; font-size:11px; }
  QLineEdit,QComboBox { background:#0c121a; border:1px solid #394b5e; border-radius:5px; padding:7px; min-height:24px; }
  QComboBox::drop-down { border:0px; border-left:1px solid #435264; background:#253344; width:24px; }
+ QFrame#modeSeparator,QFrame#resolutionSeparator { border:0px; border-top:1px solid #435264; min-height:1px; max-height:1px; }
  QFrame#settingsSeparator { border:0px; border-top:1px solid #5c758d; min-height:8px; max-height:8px; margin-top:6px; }
  QGroupBox { border:1px solid #394b5e; border-radius:5px; margin-top:12px; padding:12px 8px 8px; }
  QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }

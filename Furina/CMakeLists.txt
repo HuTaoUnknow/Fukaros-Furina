@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Furina VERSION 0.4.1 LANGUAGES C CXX)
+project(Furina VERSION 0.4.2 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
@@ -25,8 +25,8 @@ if(ANDROID)
   QT_ANDROID_TARGET_SDK_VERSION 35
   QT_ANDROID_COMPILE_SDK_VERSION 36
   QT_ANDROID_SDK_BUILD_TOOLS_REVISION "36.0.0"
-  QT_ANDROID_VERSION_CODE 5
-  QT_ANDROID_VERSION_NAME "0.4.1")
+  QT_ANDROID_VERSION_CODE 6
+  QT_ANDROID_VERSION_NAME "0.4.2")
 elseif(MINGW)
  target_link_options(Furina PRIVATE -mwindows)
 endif()
@@ -65,6 +65,6 @@ endif()
 
 foreach(cast_ui_target Furina black_ui_test)
  if(TARGET ${cast_ui_target})
-  target_sources(${cast_ui_target} PRIVATE core/cast_ui_state.cpp core/cast_ui_state.h)
+  target_sources(${cast_ui_target} PRIVATE core/cast_ui_state.cpp core/cast_ui_state.h core/cast_control.cpp core/cast_control.h)
  endif()
 endforeach()

@@ -49,38 +49,25 @@
        <item>
         <widget class="QPushButton" name="start">
          <property name="text">
+          <string />
+         </property>
+         <property name="minimumHeight">
+          <number>40</number>
+         </property>
+         <property name="minimumWidth">
+          <number>40</number>
+         </property>
+         <property name="maximumHeight">
+          <number>40</number>
+         </property>
+         <property name="maximumWidth">
+          <number>40</number>
+         </property>
+         <property name="toolTip">
           <string>开始</string>
          </property>
-         <property name="minimumHeight">
-          <number>40</number>
-         </property>
-         <property name="minimumWidth">
-          <number>40</number>
-         </property>
-         <property name="maximumHeight">
-          <number>40</number>
-         </property>
-         <property name="maximumWidth">
-          <number>40</number>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="stop">
-         <property name="text">
-          <string>停止</string>
-         </property>
-         <property name="minimumHeight">
-          <number>40</number>
-         </property>
-         <property name="minimumWidth">
-          <number>40</number>
-         </property>
-         <property name="maximumHeight">
-          <number>40</number>
-         </property>
-         <property name="maximumWidth">
-          <number>40</number>
+         <property name="accessibleName">
+          <string>开始</string>
          </property>
         </widget>
        </item>

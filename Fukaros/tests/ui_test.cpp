@@ -47,6 +47,15 @@ private slots:
   maximize->click();QTRY_VERIFY(!w.isFullScreen()&&w.isMaximized());w.findChild<QPushButton*>("windowClose")->click();QVERIFY(!w.isVisible());
  }
 
+ void singleControlCancelsWaiting(){
+  MainWindow w;w.show();auto *button=w.findChild<QPushButton*>("start");auto *control=w.findChild<CastControl*>();QVERIFY(button&&control);QVERIFY(!w.findChild<QPushButton*>("stop"));QVERIFY(button->text().isEmpty()&&!button->icon().isNull());QCOMPARE(button->iconSize(),w.findChild<QPushButton*>("settings")->iconSize());QCOMPARE(control->state(),CastControl::Start);
+  QTcpServer transport;QVERIFY(transport.listen(QHostAddress::AnyIPv4,27183));
+  w.findChild<QLineEdit*>("host")->setText("127.0.0.2");w.findChild<QLineEdit*>("token")->setText("control-test-code");w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
+  button->click();QCOMPARE(control->state(),CastControl::Waiting);QVERIFY(button->isEnabled());const auto first=button->icon().cacheKey();QTest::qWait(160);QCOMPARE(control->state(),CastControl::Waiting);QVERIFY(first!=button->icon().cacheKey());w.grab().save("control-waiting.png");
+  button->click();QCOMPARE(control->state(),CastControl::Start);QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled());
+  QTRY_VERIFY(!w.findChild<Peer*>()->ready());
+ }
+
  void connectionSettingsAreSeparated(){
   MainWindow w;w.show();w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());
   auto *tabs=w.findChild<QTabWidget*>("transport");QVERIFY(tabs&&tabs->count()==2);QCOMPARE(tabs->tabText(0),QString("USB 有线"));QCOMPARE(tabs->tabText(1),QString("Wi-Fi 无线"));
@@ -60,16 +69,16 @@ private slots:
  void remoteScreenAndInput(){
   qRegisterMetaType<fr_gesture>();Peer server;QVERIFY(server.listen(27183,"ui-test-code"));
   MainWindow w;w.show();auto *view=w.findChild<ScreenView*>();auto *mode=w.findChild<QCheckBox*>("extend"),*duplicate=w.findChild<QCheckBox*>("duplicate");auto *source=w.findChild<QComboBox*>("castSource");
-  auto *start=w.findChild<QPushButton*>("start"),*stop=w.findChild<QPushButton*>("stop");auto *share=w.findChild<QCheckBox*>("share"),*receive=w.findChild<QCheckBox*>("receive");auto *state=w.findChild<CastUiState*>();
+  auto *start=w.findChild<QPushButton*>("start"),*stop=start;auto *share=w.findChild<QCheckBox*>("share"),*receive=w.findChild<QCheckBox*>("receive");auto *state=w.findChild<CastUiState*>();auto *control=w.findChild<CastControl*>();
   duplicate->setChecked(true);QVERIFY(receive->isChecked()&&!share->isChecked());QVERIFY(!w.findChild<QWidget*>("modePanel")->isVisible());
   QCOMPARE(start->width(),40);QCOMPARE(start->width(),start->height());QCOMPARE(share->mapTo(&w,QPoint()).y(),receive->mapTo(&w,QPoint()).y());auto *sidebar=w.findChild<QWidget*>("sidebar");QCOMPARE(sidebar->width(),48);QVERIFY(!view->hasImage()&&!view->busy());
   w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());
   w.findChild<QLineEdit*>("host")->setText("127.0.0.2");w.findChild<QLineEdit*>("token")->setText("ui-test-code");w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);dialog->accept();
   auto *client=w.findChild<Peer*>();auto *consent=w.findChild<SessionConsent*>();QSignalSpy connected(client,&Peer::connected),gestures(&server,&Peer::gesture),keys(&server,&Peer::key),sessions(&server,&Peer::session),approvals(&server,&Peer::approval),profiles(&server,&Peer::profile);
   QImage image(1024,600,QImage::Format_RGB32);image.fill(QColor(48,78,118));
-  start->click();QTRY_COMPARE(connected.count(),1);QTRY_COMPARE(approvals.count(),1);QVERIFY(state->locked()&&!state->occupied());QVERIFY(!consent->active());QVERIFY(!actionSeen(sessions,FR_START_SHARE));
-  server.sendSession(FR_START_SHARE);server.sendFrame(image);QTest::qWait(40);QVERIFY(!view->hasImage());server.sendApproval(approvals[0][0].toUInt(),FR_APPROVAL_REJECT,approvals[0][2].toUInt());QTRY_VERIFY(start->isEnabled());QVERIFY(!state->locked()&&share->isEnabled());
-  const auto grant=[&](){const auto count=requestCount(approvals);start->click();QTRY_COMPARE(requestCount(approvals),count+1);const auto row=approvals.last();QCOMPARE(row[1].toUInt(),quint32(FR_APPROVAL_REQUEST));server.sendApproval(row[0].toUInt(),FR_APPROVAL_ACCEPT,row[2].toUInt());QTRY_VERIFY(consent->active());QVERIFY(state->occupied());};
+  start->click();QTRY_COMPARE(connected.count(),1);QCOMPARE(control->state(),CastControl::Stop);QTRY_COMPARE(approvals.count(),1);QVERIFY(state->locked()&&!state->occupied());QVERIFY(!consent->active());QVERIFY(!actionSeen(sessions,FR_START_SHARE));
+  server.sendSession(FR_START_SHARE);server.sendFrame(image);QTest::qWait(40);QVERIFY(!view->hasImage());server.sendApproval(approvals[0][0].toUInt(),FR_APPROVAL_REJECT,approvals[0][2].toUInt());QTRY_VERIFY(!state->locked());QVERIFY(share->isEnabled());
+  const auto grant=[&](){const auto count=requestCount(approvals);if(control->state()!=CastControl::Start){stop->click();QTRY_VERIFY(!server.ready());}start->click();QTRY_COMPARE(requestCount(approvals),count+1);const auto row=approvals.last();QCOMPARE(row[1].toUInt(),quint32(FR_APPROVAL_REQUEST));server.sendApproval(row[0].toUInt(),FR_APPROVAL_ACCEPT,row[2].toUInt());QTRY_VERIFY(consent->active());QVERIFY(state->occupied());};
   grant();QTRY_VERIFY(actionSeen(sessions,FR_START_SHARE));server.sendFrame(image);QTRY_VERIFY(view->hasImage());QVERIFY(!view->busy());
   QVERIFY(!share->isEnabled()&&!receive->isEnabled()&&!mode->isEnabled()&&!duplicate->isEnabled());
   share->click();share->setChecked(true);mode->setChecked(true);QVERIFY(receive->isChecked()&&!share->isChecked());QVERIFY(duplicate->isChecked()&&!mode->isChecked());QVERIFY(server.ready()&&consent->active());
@@ -83,8 +92,8 @@ private slots:
   stop->click();QTRY_VERIFY(!server.ready());mode->setChecked(true);grant();
   if(qEnvironmentVariableIsSet("FURINA_TEST_MULTI_SCREEN")){QCOMPARE(QGuiApplication::screens().size(),3);QCOMPARE(source->count(),1);QVERIFY(source->currentText().startsWith("extended-test"));QTRY_VERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("扩展投屏已启动：extended-test"));}
   else{QCOMPARE(QGuiApplication::screens().size(),1);QTRY_VERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("扩展暂不可用"));}
-  QVERIFY(!source->isEnabled()&&!start->isEnabled());QVERIFY(state->locked());stop->click();QTRY_VERIFY(!server.ready());duplicate->setChecked(true);receive->click();grant();server.sendFrame(image);QTRY_VERIFY(view->hasImage());
-  server.close();QTRY_VERIFY(!client->ready());QVERIFY(state->occupied()&&!start->isEnabled()&&!share->isEnabled());stop->click();QVERIFY(start->isEnabled()&&share->isEnabled()&&!state->locked()&&!view->busy()&&!view->hasImage());
+  QVERIFY(!source->isEnabled()&&(start->isEnabled()&&control->state()==CastControl::Stop));QVERIFY(state->locked());stop->click();QTRY_VERIFY(!server.ready());duplicate->setChecked(true);receive->click();grant();server.sendFrame(image);QTRY_VERIFY(view->hasImage());
+  server.close();QTRY_VERIFY(!client->ready());QVERIFY(state->occupied()&&(start->isEnabled()&&control->state()==CastControl::Stop)&&!share->isEnabled());stop->click();QVERIFY(start->isEnabled()&&share->isEnabled()&&!state->locked()&&!view->busy()&&!view->hasImage());
  }
 
 };

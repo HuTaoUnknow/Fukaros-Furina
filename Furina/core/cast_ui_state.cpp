@@ -19,6 +19,7 @@ void CastUiState::updateControls(){
   if(auto *group=m_window->findChild<QWidget*>(name))group->setEnabled(!m_locked);
  m_save->setEnabled(!m_locked);
  if(auto *hintLabel=m_window->findChild<QWidget*>("sessionSettingsHint"))hintLabel->setVisible(m_locked);
+ emit changed();
 }
 void CastUiState::preserveSelection(){
  if(!m_locked||m_restoring)return;

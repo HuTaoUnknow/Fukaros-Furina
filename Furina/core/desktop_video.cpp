@@ -291,7 +291,7 @@ void DesktopVideoSender::run(){
      QByteArray packet(FR_VIDEO_HEADER,Qt::Uninitialized);fr_video_write(reinterpret_cast<uint8_t*>(packet.data()),&info);packet+=output[i];m_pending=true;emit this->packet(packet);++frames;recovery.restart();
      if(announced){emit status(furinaStatus("显示配置变化后的实时采集已恢复。","Live capture recovered after the display configuration change."));announced=false;}
     }
-    if(sample.elapsed()>=1000){double fps=frames*1000.0/sample.elapsed(),ms=frames?work/frames:0;emit stats(fps,ms,currentEdge);fr_video_policy_sample(&policy,qMin(fps,m_remoteFps.load()),qMax(ms+m_localDecodeMs.load(),m_remoteWorkMs.load()),m_queueMs);frames=0;work=0;sample.restart();}
+    if(sample.elapsed()>=1000){const auto elapsed=sample.elapsed();double fps=frames*1000.0/elapsed,ms=frames?work/frames:0;emit stats(fps,ms,currentEdge);fr_video_policy_sample_elapsed(&policy,qMin(fps,m_remoteFps.load()),qMax(ms+m_localDecodeMs.load(),m_remoteWorkMs.load()),m_queueMs,uint32_t(qMin<qint64>(elapsed,60000)));frames=0;work=0;sample.restart();}
    }
    if(!retry||m_stop)break;
    if(!announced){emit status(furinaStatus("显示配置变化，正在重建 GPU 采集与编码。","Display configuration changed. Recreating GPU capture and encoding."));announced=true;}
