@@ -13,6 +13,14 @@ VirtualDisplayController::~VirtualDisplayController(){release();}
 bool VirtualDisplayController::available() const{return fr_virtual_available()!=0;}
 QString VirtualDisplayController::screenName() const{return m_qtName;}
 QString VirtualDisplayController::deviceName() const{char name[128]{};return fr_virtual_name(&m_display,name,sizeof(name))?QString::fromUtf8(name):QString();}
+bool VirtualDisplayController::position(QPoint *position) const{
+ long x=0,y=0;if(!position||fr_virtual_get_position(&m_display,&x,&y))return false;*position=QPoint(x,y);return true;
+}
+bool VirtualDisplayController::setPosition(const QPoint &position){
+ const long result=fr_virtual_set_position(&m_display,position.x(),position.y());
+ if(result)emit status("恢复扩展屏位置失败，错误："+QString::number(result),"Restoring the extension position failed. Error: "+QString::number(result));
+ return result==0;
+}
 void VirtualDisplayController::fail(const QString &cn,const QString &en){
  release();emit failed(cn,en);
 }

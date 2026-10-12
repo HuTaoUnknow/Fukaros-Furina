@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QPoint>
 #include "virtual_display.h"
 class VirtualDisplayController: public QObject {
  Q_OBJECT
@@ -12,6 +13,8 @@ public:
  bool preparing() const {return m_preparing;}
  QString screenName() const;
  QString deviceName() const;
+ bool position(QPoint *position) const;
+ bool setPosition(const QPoint &position);
  void ensure();
  void release();
 signals:

@@ -31,28 +31,67 @@ bool Peer::listen(quint16 port,const QString &token,const QString &bindAddress){
  if(!m_server.listen(address,port)){emit status(m_server.errorString());return false;}
  emit status(tr("Listening on port %1").arg(port));return true;
 }
-void Peer::connectTo(const QString &host,quint16 port,const QString &token){
+void Peer::connectTo(const QString &host,quint16 port,const QString &token,const QString &localAddress){
  close();if(token.size()<6){emit status(tr("Enter the tablet pairing code (at least 6 characters)"));return;}
- m_token=token;auto *s=new QTcpSocket(this);attach(s,false);s->connectToHost(host,port);
+ m_token=token;auto *s=new QTcpSocket(this);s->setProxy(QNetworkProxy::NoProxy);
+ if(!localAddress.isEmpty()){
+  QHostAddress local;if(!local.setAddress(localAddress)||local.protocol()!=QAbstractSocket::IPv4Protocol||!s->bind(local,0)){
+   emit status("无法绑定 USB 网卡，连接已取消。\nCould not bind the USB adapter. Connection cancelled.");s->deleteLater();emit disconnected();return;
+  }
+ }
+ attach(s,false);s->connectToHost(host,port);
 }
-void Peer::close(){
- m_server.close();m_tick.stop();m_ready=false;
- if(m_socket){auto *s=m_socket;m_socket=nullptr;s->disconnect(this);s->abort();s->deleteLater();emit disconnected();}
- m_rx.clear();m_challenge.clear();m_backlog.invalidate();m_waitVideoKey=false;
+void Peer::close(bool graceful){
+ m_server.close();m_tick.stop();
+ const bool drain=graceful&&m_ready&&m_socket&&m_socket->state()==QAbstractSocket::ConnectedState;
+ // TCP orders this ping after cancellation. Its pong acknowledges that the
+ // remote endpoint processed the stop, rather than just accepting TCP bytes.
+ if(drain)send(FR_PING);
+ m_ready=false;
+ if(m_socket){
+  auto *s=m_socket;m_socket=nullptr;s->disconnect(this);
+  if(drain&&s->state()==QAbstractSocket::ConnectedState&&m_pendingPings>0){
+   connect(s,&QTcpSocket::disconnected,s,&QObject::deleteLater);
+   connect(s,&QTcpSocket::errorOccurred,s,[s](QAbstractSocket::SocketError){s->abort();s->deleteLater();});
+   connect(s,&QTcpSocket::readyRead,s,[s,pending=m_rx,pongs=m_pendingPings]()mutable{
+    while(s->bytesAvailable()){
+     const auto budget=qint64(FR_MAX_PAYLOAD+FR_HEADER_SIZE)-pending.size();
+     if(budget<=0){s->abort();s->deleteLater();return;}
+     pending+=s->read(qMin(budget,s->bytesAvailable()));
+     while(pending.size()>=FR_HEADER_SIZE){
+      fr_header h{};if(!fr_decode_header(reinterpret_cast<const uint8_t*>(pending.constData()),&h)){s->abort();s->deleteLater();return;}
+      if(pending.size()<FR_HEADER_SIZE+h.length)break;
+      pending.remove(0,FR_HEADER_SIZE+h.length);
+      if(h.type==FR_PING&&h.length==0){uint8_t reply[FR_HEADER_SIZE];fr_encode_header(reply,FR_PONG,0);s->write(reinterpret_cast<const char*>(reply),sizeof reply);s->flush();}
+      if(h.type==FR_PONG&&h.length==0&&--pongs==0){
+       s->readAll();s->disconnectFromHost();if(s->state()==QAbstractSocket::UnconnectedState)s->deleteLater();return;
+      }
+     }
+    }
+   });
+   QTimer::singleShot(5000,s,[s]{s->abort();s->deleteLater();});
+   s->flush();
+  }else{s->abort();s->deleteLater();}
+  emit disconnected();
+ }
+ m_rx.clear();m_challenge.clear();m_backlog.invalidate();m_waitVideoKey=false;m_pendingPings=0;
 }
 void Peer::attach(QTcpSocket *s,bool server){
- m_socket=s;m_serverSide=server;m_ready=false;m_rx.clear();m_session.start();m_lastRx.start();
+ m_socket=s;m_serverSide=server;m_ready=false;m_pendingPings=0;m_rx.clear();m_session.start();m_lastRx.start();
  s->setProxy(QNetworkProxy::NoProxy);
  s->setReadBufferSize(FR_MAX_PAYLOAD+FR_HEADER_SIZE);
  s->setSocketOption(QAbstractSocket::LowDelayOption,1);
  connect(s,&QTcpSocket::bytesWritten,this,[this]{if(m_socket&&m_socket->bytesToWrite()==0)m_backlog.invalidate();});
  connect(s,&QTcpSocket::readyRead,this,&Peer::read);
- connect(s,&QTcpSocket::errorOccurred,this,[this,s](QAbstractSocket::SocketError){
+ connect(s,&QTcpSocket::errorOccurred,this,[this,s](QAbstractSocket::SocketError error){
   if(m_socket!=s)return;
+  // FIN may arrive with unread final control messages in the receive buffer.
+  if(error==QAbstractSocket::RemoteHostClosedError){read();if(m_socket!=s)return;}
   const auto reason=s->errorString();m_socket=nullptr;m_ready=false;m_tick.stop();m_rx.clear();m_challenge.clear();
   s->disconnect(this);s->abort();s->deleteLater();emit disconnected();emit status(reason);
  });
  connect(s,&QTcpSocket::disconnected,this,[this,s]{
+  if(m_socket==s)read();
   if(m_socket==s){m_socket=nullptr;m_ready=false;m_tick.stop();m_rx.clear();emit disconnected();emit status(tr("Disconnected"));}s->deleteLater();
  });
  if(server){
@@ -73,7 +112,7 @@ void Peer::read(){
    if(m_rx.size()<FR_HEADER_SIZE+h.length)break;
    auto payload=m_rx.mid(FR_HEADER_SIZE,h.length);m_rx.remove(0,FR_HEADER_SIZE+h.length);m_lastRx.restart();
    handle(h.type,payload);
-   if(!m_socket||m_socket->state()!=QAbstractSocket::ConnectedState)return;
+   if(!m_socket)return;
   }
  }
 }
@@ -115,7 +154,7 @@ void Peer::handle(quint8 t,const QByteArray &p){
   emit session(action);break;
  }
  case FR_PING:if(!p.isEmpty()){fail(tr("Invalid ping"));return;}send(FR_PONG);break;
- case FR_PONG:if(!p.isEmpty())fail(tr("Invalid pong"));break;
+ case FR_PONG:if(!p.isEmpty())fail(tr("Invalid pong"));else if(m_pendingPings>0)--m_pendingPings;break;
  default:fail(tr("Unexpected message"));
  }
 }
@@ -123,6 +162,7 @@ void Peer::send(quint8 t,const QByteArray &p){
  if(!m_socket||m_socket->state()!=QAbstractSocket::ConnectedState)return;
  uint8_t h[FR_HEADER_SIZE];if(!fr_encode_header(h,t,p.size()))return;
  if(m_socket->bytesToWrite()>2*1024*1024){if(t!=FR_FRAME&&t!=FR_VIDEO)fail(tr("Peer too slow"));return;}
+ if(t==FR_PING)++m_pendingPings;
  m_socket->write(reinterpret_cast<const char*>(h),sizeof h);m_socket->write(p);
 }
 bool Peer::canSendFrame()const{return m_ready&&m_socket&&m_socket->bytesToWrite()<256*1024;}

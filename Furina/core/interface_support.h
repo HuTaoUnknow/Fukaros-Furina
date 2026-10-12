@@ -47,10 +47,8 @@ public:
  void setActive(bool on);
 signals:
  void changed(bool active);
-protected:
- bool eventFilter(QObject *watched,QEvent *event) override;
 private:
- QMainWindow *m_window;QWidget *m_sidebar,*m_controls;ScreenView *m_view;QPushButton *m_exit;
+ QMainWindow *m_window;QWidget *m_sidebar,*m_controls;ScreenView *m_view;
  bool m_active=false,m_wasMaximized=false;QRect m_geometry;
 #ifdef Q_OS_WIN
  Qt::WindowFlags m_windowFlags;quint32 m_borderColor=0xffffffffu,m_cornerPreference=0;

@@ -14,7 +14,6 @@ import android.view.SurfaceView;
 import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -30,7 +29,6 @@ public final class VideoCore {
     private static Decoder decoder;
     private static SurfaceView texture;
     private static int viewX,viewY,viewW,viewH;
-    private static Button exitButton;
     private static boolean visible;
 
     private static boolean hardware(MediaCodecInfo info){
@@ -105,12 +103,12 @@ public final class VideoCore {
     }
     public static void releaseActivity(){
         synchronized(VideoCore.class){if(decoder!=null){Decoder old=decoder;decoder=null;old.handler.post(()->{old.close();old.output=null;old.handler.removeCallbacksAndMessages(null);old.thread.quitSafely();});}}
-        texture=null;exitButton=null;visible=false;
+        texture=null;visible=false;
     }
     public static void setCaptureEdge(int edge){captureEdge=edge;CaptureService.reconfigureVideo(edge);}
     public static void requestKeyframe(){Encoder encoder=activeEncoder;if(encoder!=null)encoder.handler.post(encoder::requestKey);}
     public static void submit(byte[] packet){synchronized(VideoCore.class){if(decoder==null)decoder=new Decoder();decoder.offer(packet);}}
-    public static void reset(){synchronized(VideoCore.class){if(decoder!=null)decoder.reset();}FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(()->{visible=false;if(texture!=null)texture.setVisibility(View.GONE);if(exitButton!=null)exitButton.setVisibility(View.GONE);});}
+    public static void reset(){synchronized(VideoCore.class){if(decoder!=null)decoder.reset();}FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(()->{visible=false;if(texture!=null)texture.setVisibility(View.GONE);});}
     public static void show(int x,int y,int width,int height,boolean show,boolean fullscreen){
         FurinaActivity a=FurinaActivity.currentActivity();if(a==null)return;
         a.runOnUiThread(()->{
@@ -123,10 +121,8 @@ public final class VideoCore {
                     @Override public void surfaceChanged(SurfaceHolder holder,int format,int w,int h){}
                     @Override public void surfaceDestroyed(SurfaceHolder holder){synchronized(VideoCore.class){if(decoder!=null)decoder.surface(null);}}
                 });
-                exitButton=new Button(a);exitButton.setText("退出全屏");exitButton.setTextColor(0xffe4eaf0);exitButton.setBackgroundColor(0xff253344);exitButton.setOnClickListener(v->FurinaActivity.nativeExitFullscreen());parent.addView(exitButton,new FrameLayout.LayoutParams(1,1));exitButton.setVisibility(View.GONE);
             }
             visible=show;viewX=x;viewY=y;viewW=Math.max(1,width);viewH=Math.max(1,height);texture.setVisibility(show?View.VISIBLE:View.GONE);fit();
-            float density=a.getResources().getDisplayMetrics().density;int bw=(int)(100*density),bh=(int)(40*density);FrameLayout.LayoutParams button=new FrameLayout.LayoutParams(bw,bh);button.leftMargin=x+width-bw-(int)(12*density);button.topMargin=y+(int)(12*density);exitButton.setLayoutParams(button);exitButton.setVisibility(show&&fullscreen?View.VISIBLE:View.GONE);exitButton.bringToFront();fit();
         });
     }
     private static void fit(){

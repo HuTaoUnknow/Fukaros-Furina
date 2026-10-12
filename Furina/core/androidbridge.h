@@ -8,7 +8,7 @@ class AndroidBridge:public QObject{
 public:
  explicit AndroidBridge(QObject *parent=nullptr);
  ~AndroidBridge() override;
- void startCapture();void stopCapture();void accessibility();void gesture(fr_gesture g);void key(quint32 k);
+ void startCapture();void stopCapture();void accessibility();void usbSettings();void gesture(fr_gesture g);void key(quint32 k);
  QString deviceCode() const;
  void setCaptureResolution(int edge);void requestKeyframe();void receiveVideo(const QByteArray &packet);void resetVideo();
  void updateVideoView(const QRect &physicalRect,bool visible,bool fullscreen);

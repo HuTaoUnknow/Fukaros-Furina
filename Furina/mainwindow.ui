@@ -523,8 +523,15 @@
     </item>
    </layout>
   </widget>
+  <property name="windowIcon">
+   <iconset resource="resources.qrc">
+    <normaloff>:/icons/app.png</normaloff>
+   </iconset>
+  </property>
  </widget>
- <resources />
+ <resources>
+  <include location="resources.qrc" />
+ </resources>
  <connections />
  <customwidgets>
   <customwidget>

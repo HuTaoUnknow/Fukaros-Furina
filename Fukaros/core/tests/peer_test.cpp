@@ -8,6 +8,36 @@
 class PeerTest:public QObject{
  Q_OBJECT
 private slots:
+
+ void gracefulStopDrainsCancellation_data(){
+  QTest::addColumn<bool>("serverStops");
+  QTest::newRow("client-stops")<<false;QTest::newRow("server-stops")<<true;
+ }
+ void gracefulStopDrainsCancellation(){
+  QFETCH(bool,serverStops);Peer server,client;
+  QVERIFY(server.listen(29880,"stop-sync-code"));client.connectTo("127.0.0.1",29880,"stop-sync-code");QTRY_VERIFY(server.ready()&&client.ready());
+  auto *sender=serverStops?&server:&client,*receiver=serverStops?&client:&server;
+  QSignalSpy video(receiver,&Peer::video),approval(receiver,&Peer::approval),closed(receiver,&Peer::disconnected);QStringList order;
+  connect(receiver,&Peer::video,this,[&]{order<<"video";});connect(receiver,&Peer::approval,this,[&]{order<<"cancel";});connect(receiver,&Peer::disconnected,this,[&]{order<<"disconnected";});
+  QByteArray packet(FR_VIDEO_HEADER+192*1024,0);fr_video_info info{FR_VIDEO_KEY,1,1920,1080,1,123};QVERIFY(fr_video_write(reinterpret_cast<uint8_t*>(packet.data()),&info));
+  QVERIFY(sender->sendVideo(packet));sender->sendApproval(3101,FR_APPROVAL_CANCEL,FR_APPROVAL_SHARE);sender->close(true);QVERIFY(!sender->ready());
+  QTRY_COMPARE(closed.count(),1);QCOMPARE(video.count(),1);QCOMPARE(approval.count(),1);QCOMPARE(approval[0][0].toUInt(),3101u);QCOMPARE(approval[0][1].toUInt(),quint32(FR_APPROVAL_CANCEL));
+  QCOMPARE(order,QStringList({"video","cancel","disconnected"}));
+ }
+ void simultaneousStopsFinishBothTransports(){
+  Peer server,client;QVERIFY(server.listen(29881,"stop-sync-code"));client.connectTo("127.0.0.1",29881,"stop-sync-code");QTRY_VERIFY(server.ready()&&client.ready());
+  server.sendApproval(3102,FR_APPROVAL_CANCEL,FR_APPROVAL_SHARE);client.sendApproval(3102,FR_APPROVAL_CANCEL,FR_APPROVAL_SHARE);server.close(true);client.close(true);
+  QTRY_VERIFY(server.findChildren<QTcpSocket*>().isEmpty()&&client.findChildren<QTcpSocket*>().isEmpty());
+ }
+ void anOldHeartbeatPongDoesNotFinishStop(){
+  Peer server;QTcpSocket raw;QVERIFY(server.listen(29882,"stop-sync-code"));raw.connectToHost("127.0.0.1",29882);QTRY_VERIFY(raw.bytesAvailable()>=44);
+  const auto challenge=raw.read(44).mid(FR_HEADER_SIZE);const auto mac=QMessageAuthenticationCode::hash(challenge,"stop-sync-code",QCryptographicHash::Sha256);
+  uint8_t header[FR_HEADER_SIZE];fr_encode_header(header,FR_AUTH,mac.size());raw.write(reinterpret_cast<char*>(header),sizeof header);raw.write(mac);QTRY_VERIFY(server.ready());QTRY_VERIFY(raw.bytesAvailable()>=FR_HEADER_SIZE);raw.read(FR_HEADER_SIZE);
+  QTRY_VERIFY_WITH_TIMEOUT(raw.bytesAvailable()>=FR_HEADER_SIZE,4000);fr_header ping{};const auto earlier=raw.read(FR_HEADER_SIZE);QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(earlier.constData()),&ping));QCOMPARE(ping.type,quint8(FR_PING));
+  server.sendApproval(3103,FR_APPROVAL_CANCEL,FR_APPROVAL_SHARE);server.close(true);QTRY_VERIFY(raw.bytesAvailable()>=36);const auto stop=raw.read(36);fr_header barrier{};QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(stop.constData()+24),&barrier));QCOMPARE(barrier.type,quint8(FR_PING));
+  fr_encode_header(header,FR_PONG,0);raw.write(reinterpret_cast<char*>(header),sizeof header);raw.flush();QTest::qWait(40);QCOMPARE(raw.state(),QAbstractSocket::ConnectedState);
+  raw.write(reinterpret_cast<char*>(header),sizeof header);raw.flush();QTRY_COMPARE(raw.state(),QAbstractSocket::UnconnectedState);
+ }
  void videoProfileFeedback(){
   Peer server,client;QSignalSpy paired(&client,&Peer::connected),video(&server,&Peer::video),profile(&server,&Peer::profile),feedback(&client,&Peer::feedback);
   QVERIFY(server.listen(29879,"video-code"));client.connectTo("127.0.0.1",29879,"video-code");QTRY_COMPARE(paired.count(),1);

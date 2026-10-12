@@ -10,6 +10,11 @@
 #include <QDialogButtonBox>
 #include <QRegularExpression>
 #include <QFrame>
+#include <QScrollArea>
+#include <QScrollBar>
+#include "settings_support.h"
+#include <QNetworkDatagram>
+#include <QNetworkProxy>
 #include "mainwindow.h"
 static int requestCount(const QSignalSpy &spy){int count=0;for(const auto &row:spy)if(row[1].toUInt()==FR_APPROVAL_REQUEST)++count;return count;}
 static bool actionSeen(const QSignalSpy &spy,quint32 action){for(const auto &row:spy)if(row[0].toUInt()==action)return true;return false;}
@@ -17,6 +22,51 @@ class UiTest:public QObject{
  Q_OBJECT
 private slots:
  void initTestCase(){QCoreApplication::setOrganizationName("FurinaTests");QCoreApplication::setApplicationName("FurinaUi60");}
+
+ void stepsAndRequiredFields(){
+  MainWindow w;w.show();w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());
+  QVERIFY(!w.findChild<QLineEdit*>("token")->property("settingsRole").isValid());
+  for(const auto *name:{"serial","host"})QCOMPARE(w.findChild<QLineEdit*>(name)->property("settingsRole").toString(),QString("optional"));
+  w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);w.findChild<QScrollArea*>("settingsScroll")->verticalScrollBar()->setValue(0);QTest::qWait(30);
+  auto *page=w.findChild<QWidget*>("usbPage");
+  for(const auto *name:{"serial"}){auto *field=w.findChild<QLineEdit*>(name);QVERIFY(page->rect().contains(QRect(field->mapTo(page,QPoint()),field->size())));}
+  w.findChild<StepHelpButton*>("usbSteps")->click();auto *popup=dialog->findChild<QFrame*>("stepsPopup");QVERIFY(popup&&popup->isVisible());QVERIFY(dialog->rect().contains(popup->geometry()));dialog->grab().save("mobile-usb-help.png");popup->findChild<QPushButton*>("closeSteps")->click();
+  QVERIFY(!w.findChild<QLabel*>("usbHint")&&!w.findChild<QLabel*>("wifiHint")&&!w.findChild<QLabel*>("connectionHint"));dialog->reject();
+ }
+
+ void usbServiceIncludesDiscovery(){
+  MainWindow w;w.findChild<QLineEdit*>("token")->setText("usb-mobile-test-code");w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
+  // A Wi-Fi-only bind address must not prevent the USB page from listening.
+  w.findChild<QLineEdit*>("host")->setText("invalid-wifi-address");w.findChild<QPushButton*>("start")->click();
+  QCOMPARE(w.findChild<CastControl*>()->state(),CastControl::Waiting);
+  QUdpSocket client;client.setProxy(QNetworkProxy::NoProxy);QVERIFY(client.bind(QHostAddress("127.0.0.2"),0));
+  const QByteArray nonce(32,'a');client.writeDatagram(furinaDiscoveryRequest(nonce),QHostAddress("127.0.0.2"),27184);
+  QTRY_VERIFY(client.hasPendingDatagrams());QVERIFY(furinaDiscoveryMatches(client.receiveDatagram().data(),nonce));
+  w.findChild<QPushButton*>("start")->click();QCOMPARE(w.findChild<CastControl*>()->state(),CastControl::Start);
+  QUdpSocket released;QVERIFY(released.bind(QHostAddress::AnyIPv4,27184));
+ }
+
+ void stopSynchronization_data(){
+  QTest::addColumn<bool>("remoteStops");QTest::addColumn<bool>("remoteShares");
+  QTest::newRow("local-stop-receiving")<<false<<true;QTest::newRow("local-stop-sharing")<<false<<false;
+  QTest::newRow("remote-stop-receiving")<<true<<true;QTest::newRow("remote-stop-sharing")<<true<<false;
+ }
+ void stopSynchronization(){
+  QFETCH(bool,remoteStops);QFETCH(bool,remoteShares);MainWindow w;w.show();
+  auto *peer=w.findChild<Peer*>();auto *consent=w.findChild<SessionConsent*>();auto *state=w.findChild<CastUiState*>();auto *control=w.findChild<CastControl*>();auto *button=w.findChild<QPushButton*>("start");auto *view=w.findChild<ScreenView*>();
+  Peer other;QSignalSpy approvals(&other,&Peer::approval);QVERIFY(other.listen(29904,"stop-sync-code"));peer->connectTo("127.0.0.1",29904,"stop-sync-code");QTRY_VERIFY(peer->ready()&&other.ready());
+  // Authentication alone is idle, and consent is still a waiting state.
+  QCOMPARE(control->state(),CastControl::Start);const quint32 options=remoteShares?FR_APPROVAL_SHARE:FR_APPROVAL_RECEIVE;
+  other.sendApproval(3201,FR_APPROVAL_REQUEST,options);QTRY_VERIFY(consent->pending());QCOMPARE(control->state(),CastControl::Waiting);
+  w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(state->occupied());QCOMPARE(control->state(),CastControl::Stop);QVERIFY(state->locked());
+  if(remoteShares){QImage image(80,60,QImage::Format_RGB32);image.fill(Qt::blue);other.sendFrame(image);QTRY_VERIFY(view->hasImage());}else{QVERIFY(view->busy());}
+  if(remoteStops){other.sendApproval(3201,FR_APPROVAL_CANCEL,options);other.close(true);}else{
+   button->click();QTRY_VERIFY([&]{for(const auto &row:approvals)if(row[0].toUInt()==3201&&row[1].toUInt()==FR_APPROVAL_CANCEL&&row[2].toUInt()==options)return true;return false;}());
+  }
+  QTRY_COMPARE(control->state(),CastControl::Start);QTRY_VERIFY(!peer->ready()&&!other.ready());QVERIFY(!consent->active()&&!consent->pending());QVERIFY(!state->locked()&&!state->occupied());
+  QVERIFY(!view->hasImage()&&!view->busy());QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled()&&w.findChild<QCheckBox*>("receive")->isEnabled());QCOMPARE(button->property("castState").toString(),QString("start"));
+  if(remoteStops)QVERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("stopped casting"));
+ }
  void resolutionSelection(){
   QSettings settings;settings.remove("resolution");MainWindow w;w.show();
   auto *automatic=w.findChild<QPushButton*>("resolution0");auto *full=w.findChild<QPushButton*>("resolution1920");auto *hd=w.findChild<QPushButton*>("resolution1080");auto *low=w.findChild<QPushButton*>("resolution720");
@@ -38,13 +88,13 @@ private slots:
 
  void connectionSettingsAreSeparated(){
   MainWindow w;w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());auto *tabs=w.findChild<QTabWidget*>("connectionTabs");QVERIFY(tabs&&tabs->count()==2);
-  QVERIFY(w.findChild<QWidget*>("usbPage")->isAncestorOf(w.findChild<QLineEdit*>("serial")));QVERIFY(w.findChild<QWidget*>("wifiPage")->isAncestorOf(w.findChild<QLineEdit*>("host")));tabs->setCurrentIndex(1);QVERIFY(w.findChild<QLineEdit*>("host")->isVisible());tabs->setCurrentIndex(0);dialog->grab().save("mobile-usb-settings.png");tabs->setCurrentIndex(1);dialog->grab().save("mobile-wifi-settings.png");dialog->reject();
+  QVERIFY(w.findChild<QWidget*>("usbPage")->isAncestorOf(w.findChild<QLineEdit*>("serial")));QVERIFY(w.findChild<QWidget*>("wifiPage")->isAncestorOf(w.findChild<QLineEdit*>("host")));tabs->setCurrentIndex(1);QVERIFY(w.findChild<QLineEdit*>("host")->isVisible());tabs->setCurrentIndex(0);QTest::qWait(30);dialog->grab().save("mobile-usb-settings.png");tabs->setCurrentIndex(1);QTest::qWait(30);dialog->grab().save("mobile-wifi-settings.png");dialog->reject();
  }
  void receiveAndControlConsent(){
   MainWindow w;w.show();auto *view=w.findChild<ScreenView*>();auto *start=w.findChild<QPushButton*>("start"),*stop=start;auto *share=w.findChild<QCheckBox*>("share"),*receive=w.findChild<QCheckBox*>("receive"),*extend=w.findChild<QCheckBox*>("extend"),*duplicate=w.findChild<QCheckBox*>("duplicate");auto *consent=w.findChild<SessionConsent*>();auto *state=w.findChild<CastUiState*>();auto *control=w.findChild<CastControl*>();
   duplicate->setChecked(true);QVERIFY(receive->isChecked()&&!share->isChecked());QVERIFY(!view->hasImage()&&!view->busy());
   w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());w.findChild<QLineEdit*>("token")->setText("black-ui-code");w.findChild<QLineEdit*>("host")->setText("0.0.0.0");w.findChild<QCheckBox*>("allowControl")->setChecked(false);dialog->accept();
-  start->click();QVERIFY(state->locked()&&!state->occupied());Peer client;QSignalSpy connected(&client,&Peer::connected),status(&client,&Peer::status),sessions(&client,&Peer::session),approvals(&client,&Peer::approval),profiles(&client,&Peer::profile);client.connectTo("127.0.0.2",27183,"black-ui-code");QTRY_COMPARE(connected.count(),1);QCOMPARE(control->state(),CastControl::Stop);
+  start->click();QVERIFY(state->locked()&&!state->occupied());Peer client;QSignalSpy connected(&client,&Peer::connected),status(&client,&Peer::status),sessions(&client,&Peer::session),approvals(&client,&Peer::approval),profiles(&client,&Peer::profile);client.connectTo("127.0.0.2",27183,"black-ui-code");QTRY_COMPARE(connected.count(),1);QCOMPARE(control->state(),CastControl::Waiting);
   client.sendApproval(1001,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);QTRY_VERIFY(w.findChild<QWidget*>("consentPanel")->isVisible());QVERIFY(!consent->active());QImage image(1024,600,QImage::Format_RGB32);image.fill(QColor(28,90,130));client.sendSession(FR_START_SHARE);client.sendFrame(image);QTest::qWait(30);QVERIFY(!view->hasImage());w.findChild<QPushButton*>("consentReject")->click();QTRY_VERIFY(!consent->pending());QVERIFY(!state->locked());
   QSignalSpy lateVideo(&client,&Peer::video);QByteArray late(FR_VIDEO_HEADER+1,0);fr_video_info info{FR_VIDEO_KEY,1,720,450,1,0};QVERIFY(fr_video_write(reinterpret_cast<uint8_t*>(late.data()),&info));w.findChild<AndroidBridge*>()->video(late);QTest::qWait(30);QCOMPARE(lateVideo.count(),0);
   client.sendApproval(1002,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(consent->active()&&!consent->sharing());QVERIFY(state->occupied()&&!view->busy());client.sendSession(FR_START_RECEIVE);client.sendFrame(image);QTRY_VERIFY(view->hasImage());

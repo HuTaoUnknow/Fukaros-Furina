@@ -111,6 +111,42 @@ long fr_virtual_release(fr_virtual_display *d){
  else result=fr_virtual_detach_idle();
  if(!result){free(d->paths);free(d->modes);memset(d,0,sizeof(*d));}return result;
 }
+long fr_virtual_get_position(const fr_virtual_display *d,long *x,long *y){
+ DISPLAY_DEVICEW device;DEVMODEW mode={0};
+ if(!d||!d->acquired||!x||!y)return ERROR_INVALID_PARAMETER;
+ if(!find_virtual(&device)||!(device.StateFlags&DISPLAY_DEVICE_ATTACHED_TO_DESKTOP))return ERROR_NOT_FOUND;
+ mode.dmSize=sizeof(mode);if(!EnumDisplaySettingsW(device.DeviceName,ENUM_CURRENT_SETTINGS,&mode))return ERROR_NOT_FOUND;
+ *x=mode.dmPosition.x;*y=mode.dmPosition.y;return 0;
+}
+long fr_virtual_set_position(fr_virtual_display *d,long x,long y){
+ DISPLAYCONFIG_PATH_INFO *paths=NULL;DISPLAYCONFIG_MODE_INFO *modes=NULL;UINT32 count=0,mode_count=0,i,index=UINT_MAX;LONG result;unsigned attempt;
+ if(!d||!d->acquired)return ERROR_INVALID_PARAMETER;
+ for(attempt=0;attempt<4;attempt++){
+  result=GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,&count,&mode_count);if(result)goto done;
+  paths=calloc(count+1,sizeof(*paths));modes=calloc(mode_count+1,sizeof(*modes));
+  if(!paths||!modes){result=ERROR_OUTOFMEMORY;goto done;}
+  result=QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS,&count,paths,&mode_count,modes,NULL);
+  if(result!=ERROR_INSUFFICIENT_BUFFER)break;
+  free(paths);free(modes);paths=NULL;modes=NULL;
+ }
+ if(result)goto done;
+ for(i=0;i<count;i++)if(virtual_path(&paths[i])){
+  index=paths[i].sourceInfo.modeInfoIdx;
+  if(index>=mode_count||modes[index].infoType!=DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE){result=ERROR_INVALID_DATA;goto done;}
+  break;
+ }
+ if(index==UINT_MAX){result=ERROR_NOT_FOUND;goto done;}
+ /* A clone source is shared with another target. Moving it would move the
+  * physical desktop too, so require a dedicated virtual extension source. */
+ for(i=0;i<count;i++)if(!virtual_path(&paths[i])&&paths[i].sourceInfo.modeInfoIdx==index){result=ERROR_BAD_CONFIGURATION;goto done;}
+ modes[index].sourceMode.position.x=x;modes[index].sourceMode.position.y=y;
+ /* Preserve every other source and timing exactly. If a remembered layout
+  * no longer fits, let the UI request a fresh Windows configuration. */
+ result=SetDisplayConfig(count,paths,mode_count,modes,SDC_VALIDATE|SDC_USE_SUPPLIED_DISPLAY_CONFIG);
+ if(!result)result=SetDisplayConfig(count,paths,mode_count,modes,SDC_APPLY|SDC_USE_SUPPLIED_DISPLAY_CONFIG|SDC_SAVE_TO_DATABASE);
+ if(!result){d->x=x;d->y=y;}
+ done:free(paths);free(modes);return result;
+}
 #else
 int fr_virtual_available(void){return 0;}
 int fr_virtual_device_present(void){return 0;}
@@ -118,4 +154,6 @@ int fr_virtual_name(const fr_virtual_display *d,char *n,unsigned s){(void)d;(voi
 long fr_virtual_acquire(fr_virtual_display *d){(void)d;return 50;}
 long fr_virtual_release(fr_virtual_display *d){(void)d;return 0;}
 long fr_virtual_detach_idle(void){return 0;}
+long fr_virtual_get_position(const fr_virtual_display *d,long *x,long *y){(void)d;(void)x;(void)y;return 50;}
+long fr_virtual_set_position(fr_virtual_display *d,long x,long y){(void)d;(void)x;(void)y;return 50;}
 #endif

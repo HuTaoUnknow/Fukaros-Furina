@@ -12,8 +12,9 @@ public:
  explicit Peer(QObject *parent=nullptr);
  ~Peer() override;
  bool listen(quint16 port,const QString &token,const QString &bindAddress=QString());
- void connectTo(const QString &host,quint16 port,const QString &token);
- void close();
+ void connectTo(const QString &host,quint16 port,const QString &token,const QString &localAddress=QString());
+ // Finish queued session cancellation before closing an intentional stop.
+ void close(bool graceful=false);
  bool ready() const {return m_ready;}
  bool canSendFrame() const;
  void sendFrame(const QImage &image);
@@ -47,6 +48,7 @@ private:
  QByteArray m_rx,m_challenge;
  QString m_token;
  bool m_serverSide=false,m_ready=false,m_waitVideoKey=false;
+ int m_pendingPings=0;
  void attach(QTcpSocket *socket,bool server);
  void read();
  void handle(quint8 type,const QByteArray &payload);

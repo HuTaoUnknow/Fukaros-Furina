@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PositionDialog</class>
+ <widget class="QDialog" name="PositionDialog">
+  <property name="windowTitle">
+   <string>扩展屏位置</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>280</width>
+    <height>0</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="positionLayout">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <item>
+    <widget class="QStackedWidget" name="positionPages">
+     <widget class="QWidget" name="choicePage">
+      <layout class="QVBoxLayout" name="choiceLayout">
+       <item>
+        <widget class="QLabel" name="savedPositionTitle">
+         <property name="text">
+          <string>已保存上次的扩展屏位置</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="inheritPosition">
+         <property name="text">
+          <string>继承之前屏幕位置</string>
+         </property>
+         <property name="default">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="reconfigurePosition">
+         <property name="text">
+          <string>重新配置屏幕位置</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="configurePage">
+      <layout class="QVBoxLayout" name="configureLayout">
+       <item>
+        <layout class="QHBoxLayout" name="positionHelpRow">
+         <item>
+          <widget class="QLabel" name="configurePositionTitle">
+           <property name="text">
+            <string>在系统显示设置中调整屏幕位置</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="positionHelpLayout">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <spacer name="positionHelpSpring">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Minimum</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>0</width>
+               <height>16</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="StepHelpButton" name="positionHelp">
+             <property name="helpTitle" stdset="0">
+              <string>扩展屏位置操作步骤</string>
+             </property>
+             <property name="steps" stdset="0">
+              <string>1. 在 Windows 显示设置中点击“标识”，找到平板扩展屏。
+2. 拖动平板对应的屏幕方块，放在电脑屏幕的左、右、上或下。
+3. 点击“应用”，必要时选择保留更改。
+4. 返回 Fukaros，点击“完成并记住位置”开始投屏。
+5. 下次连接可继承之前位置，或重新打开此页面配置。
+6. 如需在投屏中调整位置，请先停止，再重新连接。</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="openDisplaySettings">
+         <property name="text">
+          <string>打开显示设置</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="finishPosition">
+         <property name="text">
+          <string>完成并记住位置</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="positionError">
+     <property name="text">
+      <string />
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="cancelPosition">
+     <property name="text">
+      <string>取消连接</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+  <property name="styleSheet">
+   <string>QDialog#PositionDialog QLabel { font-size:11px; }
+QDialog#PositionDialog QLabel#stepsTitle { font-size:12px; }</string>
+  </property>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>StepHelpButton</class>
+   <extends>QPushButton</extends>
+   <header>settings_support.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources />
+ <connections />
+</ui>

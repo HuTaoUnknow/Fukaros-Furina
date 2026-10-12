@@ -101,7 +101,6 @@ QString furinaStyle(){return QStringLiteral(R"(
  QPushButton:disabled { color:#768393; border-color:#283542; }
  QPushButton#start,QPushButton#settings,QPushButton#maximize { min-height:36px; padding:6px 0px; }
  QPushButton#start,QPushButton#settings,QPushButton#maximize { min-width:38px; min-height:38px; max-width:38px; max-height:38px; padding:0px; border-radius:20px; font-size:12px; }
- QPushButton#exitFullScreen { background:#253344; }
  QWidget#windowControls { background:#17212c; }
  QWidget#windowControls QPushButton { min-width:32px; max-width:32px; min-height:26px; max-height:26px; padding:0; border:0; border-radius:0; }
  QPushButton#windowClose:hover { background:#b83242; }
@@ -136,6 +135,24 @@ QString furinaStyle(){return QStringLiteral(R"(
  QScrollBar:horizontal { height:8px; background:#17212c; }
  QScrollBar::handle:horizontal { background:#415267; min-width:25px; }
  QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal { width:0px; }
+
+ QGroupBox[settingsRole="required"] { background:#14251f; border-color:#3d6453; }
+ QGroupBox[settingsRole="optional"] { background:#27241c; border-color:#6c6240; }
+ QGroupBox[settingsRole="required"] QLabel { background:transparent; color:#d9e6df; }
+ QGroupBox[settingsRole="optional"] QLabel,QGroupBox[settingsRole="optional"] QCheckBox { background:transparent; color:#e4ddc7; }
+ QLineEdit[settingsRole="required"] { background:#1a3027; border-color:#4f8068; color:#e4eee8; }
+ QLineEdit[settingsRole="optional"],QGroupBox[settingsRole="optional"] QComboBox { background:#302b20; border-color:#6c6240; color:#eae4d3; }
+ QLineEdit[settingsRole="required"]:focus { border:2px solid #6f9b81; }
+ QLineEdit[settingsRole="optional"]:focus { border:2px solid #9b8b55; }
+ QPushButton[stepHelp="true"] { background:transparent; border:0; min-width:32px; max-width:32px; min-height:16px; max-height:16px; padding:0; font-size:16px; }
+ QPushButton[stepHelp="true"]:hover { background:transparent; color:#a5e8fa; }
+ QPushButton[stepHelp="true"]:pressed { background:transparent; color:#57b9d8; }
+ QFrame[stepPopup="true"] { background:#203044; border:1px solid #77bdd9; border-radius:8px; }
+ QFrame[stepPopup="true"] QWidget { background:transparent; }
+ QLabel#stepsTitle { font-size:15px; font-weight:bold; color:#f5faff; }
+ QLabel#stepsBody { color:#eaf3ff; padding:2px; }
+ QPushButton#closeSteps { min-width:32px; max-width:32px; min-height:32px; max-height:32px; padding:0; font-size:20px; }
+ QFrame#usbSeparator,QFrame#wifiSeparator { border:0; border-top:1px solid #73837b; min-height:1px; max-height:1px; }
 )");}
 QString furinaStatus(const QString &cn,const QString &en){return cn+"\nEN: "+en;}
 void FurinaComboBox::paintEvent(QPaintEvent *event){
@@ -153,7 +170,7 @@ WindowControls::WindowControls(QMainWindow *window,Presentation *presentation,Sc
  view->installEventFilter(this);window->installEventFilter(this);controls->show();refresh();arrange();
 }
 void WindowControls::refresh(){const bool restore=m_window->isMaximized()||m_presentation->active();auto *button=m_controls->findChild<QPushButton*>("windowMaximize");button->setIcon(QIcon(new ToolIconEngine(restore?ToolIconEngine::WindowRestore:ToolIconEngine::WindowMaximize)));button->setToolTip(restore?"还原窗口":"最大化窗口");button->setAccessibleName(button->toolTip());}
-void WindowControls::arrange(){m_controls->adjustSize();m_controls->move(qMax(0,m_view->width()-m_controls->width()-12),12);m_controls->raise();auto *exit=m_view->findChild<QPushButton*>("exitFullScreen");if(exit){exit->adjustSize();exit->move(qMax(4,m_controls->x()-exit->width()-12),12);}}
+void WindowControls::arrange(){m_controls->adjustSize();m_controls->move(qMax(0,m_view->width()-m_controls->width()-12),12);m_controls->raise();}
 bool WindowControls::eventFilter(QObject *watched,QEvent *event){if(watched==m_view&&event->type()==QEvent::Resize)arrange();if(watched==m_window&&event->type()==QEvent::WindowStateChange){refresh();arrange();}return QObject::eventFilter(watched,event);}
 void FurinaComboBox::showPopup(){
 #ifdef Q_OS_ANDROID
@@ -231,14 +248,8 @@ QString furinaLog(const QString &message,const QString &english){
  return stamp+"中 · "+cn+'\n'+stamp+"EN · "+en;
 }
 Presentation::Presentation(QMainWindow *window,QWidget *sidebar,QWidget *controls,ScreenView *view):
- QObject(window),m_window(window),m_sidebar(sidebar),m_controls(controls),m_view(view),m_exit(new QPushButton("退出全屏",view)){
- m_exit->setObjectName("exitFullScreen");m_exit->setMinimumHeight(36);m_exit->hide();
- connect(m_exit,&QPushButton::clicked,this,[this]{setActive(false);});
- connect(view,&ScreenView::leaveFullScreen,this,[this]{setActive(false);});view->installEventFilter(this);
-}
-bool Presentation::eventFilter(QObject *watched,QEvent *event){
- if(watched==m_view&&event->type()==QEvent::Resize){m_exit->adjustSize();m_exit->move(qMax(4,m_view->width()-m_exit->width()-(m_view->findChild<QWidget*>("windowControls")?m_view->findChild<QWidget*>("windowControls")->width()+24:12)),12);m_exit->raise();}
- return QObject::eventFilter(watched,event);
+ QObject(window),m_window(window),m_sidebar(sidebar),m_controls(controls),m_view(view){
+ connect(view,&ScreenView::leaveFullScreen,this,[this]{setActive(false);});
 }
 void Presentation::setActive(bool on){
  if(m_active==on)return;m_active=on;
@@ -253,9 +264,9 @@ void Presentation::setActive(bool on){
 #ifdef Q_OS_WIN
   presentationFrame(m_window,0xfffffffeu,1); // DWMWA_COLOR_NONE / DWMWCP_DONOTROUND.
 #endif
-  m_exit->show();m_exit->raise();m_view->setFocus();
+  m_view->setFocus();
  }else{
-  m_exit->hide();m_sidebar->show();m_controls->show();
+  m_sidebar->show();m_controls->show();
 #ifdef Q_OS_WIN
   m_window->setWindowFlags(m_windowFlags);
 #endif

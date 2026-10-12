@@ -24,6 +24,9 @@ long fr_virtual_acquire(fr_virtual_display *display);
 long fr_virtual_release(fr_virtual_display *display);
 long fr_virtual_detach_idle(void);
 int fr_virtual_name(const fr_virtual_display *display, char *name, unsigned size);
+/* Physical desktop coordinates, independent of Qt's DPI scaling. */
+long fr_virtual_get_position(const fr_virtual_display *display, long *x, long *y);
+long fr_virtual_set_position(fr_virtual_display *display, long x, long y);
 #ifdef __cplusplus
 }
 #endif

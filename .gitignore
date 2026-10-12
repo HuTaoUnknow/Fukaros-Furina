@@ -21,6 +21,7 @@ local.properties
 gradle.properties
 # Generated diagnostics and captures
 *.log
+docs/LOCAL_*.md
 *.apk
 *.aab
 *.zip

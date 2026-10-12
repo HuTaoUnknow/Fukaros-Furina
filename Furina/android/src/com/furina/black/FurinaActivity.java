@@ -62,6 +62,18 @@ public class FurinaActivity extends QtActivity {
         final FurinaActivity a=current;
         if(a!=null)a.runOnUiThread(() -> {a.awaitingConsent=false; a.stopService(new Intent(a,CaptureService.class));});
     }
+    public static void openUsbSettings() {
+        final FurinaActivity a=current;
+        if(a!=null)a.runOnUiThread(() -> {
+            // A normal app cannot silently enable tethering on Android 15.
+            // Let the user change it in system settings, without ADB/root.
+            for(String action:new String[]{"android.settings.TETHER_SETTINGS",Settings.ACTION_WIRELESS_SETTINGS,Settings.ACTION_SETTINGS}) {
+                try { a.startActivity(new Intent(action)); return; }
+                catch(Exception ignored) { }
+            }
+            nativeStatus("无法打开系统设置，请手动开启 USB 网络共享。\nOpen system settings and enable USB tethering manually.");
+        });
+    }
     public static void openAccessibility() {
         final FurinaActivity a=current;
         if(a!=null)a.runOnUiThread(() -> a.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));

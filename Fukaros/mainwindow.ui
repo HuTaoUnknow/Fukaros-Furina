@@ -174,64 +174,6 @@
            <number>0</number>
           </property>
          </layout>
-         <widget class="QWidget" name="windowControls">
-          <layout class="QHBoxLayout" name="windowControlsLayout">
-           <property name="spacing">
-            <number>0</number>
-           </property>
-           <property name="leftMargin">
-            <number>0</number>
-           </property>
-           <property name="rightMargin">
-            <number>0</number>
-           </property>
-           <property name="topMargin">
-            <number>0</number>
-           </property>
-           <property name="bottomMargin">
-            <number>0</number>
-           </property>
-           <item>
-            <widget class="QPushButton" name="windowMinimize">
-             <property name="text">
-              <string />
-             </property>
-             <property name="toolTip">
-              <string>最小化</string>
-             </property>
-             <property name="accessibleName">
-              <string>最小化</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="windowMaximize">
-             <property name="text">
-              <string />
-             </property>
-             <property name="toolTip">
-              <string>最大化窗口</string>
-             </property>
-             <property name="accessibleName">
-              <string>最大化窗口</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="windowClose">
-             <property name="text">
-              <string />
-             </property>
-             <property name="toolTip">
-              <string>关闭</string>
-             </property>
-             <property name="accessibleName">
-              <string>关闭</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
         </widget>
        </item>
        <item>
@@ -262,7 +204,7 @@
            <widget class="QWidget" name="directionPanel">
             <layout class="QVBoxLayout" name="directionLayout">
              <property name="spacing">
-              <number>3</number>
+              <number>8</number>
              </property>
              <property name="leftMargin">
               <number>0</number>
@@ -323,6 +265,16 @@
                  <number>0</number>
                 </property>
                 <item>
+                 <widget class="QFrame" name="modeSeparator">
+                  <property name="frameShape">
+                   <enum>QFrame::HLine</enum>
+                  </property>
+                  <property name="frameShadow">
+                   <enum>QFrame::Plain</enum>
+                  </property>
+                 </widget>
+                </item>
+                <item>
                  <layout class="QHBoxLayout" name="modeChoices">
                   <item>
                    <widget class="QCheckBox" name="duplicate">
@@ -343,17 +295,20 @@
                   </item>
                  </layout>
                 </item>
-                <item>
-                 <widget class="QLabel" name="castHint">
-                  <property name="text">
-                   <string>选择共享方式</string>
-                  </property>
-                  <property name="wordWrap">
-                   <bool>true</bool>
-                  </property>
-                 </widget>
-                </item>
+                <property name="spacing">
+                 <number>8</number>
+                </property>
                </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QFrame" name="resolutionSeparator">
+               <property name="frameShape">
+                <enum>QFrame::HLine</enum>
+               </property>
+               <property name="frameShadow">
+                <enum>QFrame::Plain</enum>
+               </property>
               </widget>
              </item>
              <item>
@@ -441,16 +396,6 @@
                    </widget>
                   </item>
                  </layout>
-                </item>
-                <item>
-                 <widget class="QLabel" name="performanceHint">
-                  <property name="text">
-                   <string>目标 60 FPS · 自动优先帧率</string>
-                  </property>
-                  <property name="wordWrap">
-                   <bool>true</bool>
-                  </property>
-                 </widget>
                 </item>
                </layout>
               </widget>
@@ -578,8 +523,15 @@
     </item>
    </layout>
   </widget>
+  <property name="windowIcon">
+   <iconset resource="resources.qrc">
+    <normaloff>:/icons/app.png</normaloff>
+   </iconset>
+  </property>
  </widget>
- <resources />
+ <resources>
+  <include location="resources.qrc" />
+ </resources>
  <connections />
  <customwidgets>
   <customwidget>

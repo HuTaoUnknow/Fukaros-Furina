@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
+#include "settings_support.h"
 #include <QSettings>
 #include <QRandomGenerator>
 #include <QNetworkInterface>
@@ -10,8 +11,8 @@
 #include <QResizeEvent>
 #include <QSysInfo>
 #include <QButtonGroup>
-MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindow),cfg(new Ui::SettingsDialog),m_settings(new QDialog(this)),m_peer(this),m_android(this){
- ui->setupUi(this);cfg->setupUi(m_settings);cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");setStyleSheet(furinaStyle());furinaConfigureToolIcons(ui->settings,ui->maximize);setWindowTitle("Furina · 平板端");resize(1100,680);
+MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindow),cfg(new Ui::SettingsDialog),m_settings(new QDialog(this)),m_peer(this),m_discovery(this),m_android(this){
+ ui->setupUi(this);cfg->setupUi(m_settings);furinaConfigureSettingsScroll(cfg->settingsScroll);cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");setStyleSheet(furinaStyle());furinaConfigureToolIcons(ui->settings,ui->maximize);setWindowIcon(QIcon(":/icons/app.png"));setWindowTitle("Furina · 平板端");resize(1100,680);
  m_view=new ScreenView(this);ui->viewLayout->addWidget(m_view);m_presentation=new Presentation(this,ui->sidebar,ui->bottomPanel,m_view);m_resolution=new ResolutionChoice(this);
 m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_castUi=new CastUiState(this);m_castControl=new CastControl(this,m_castUi,&m_peer);
  connect(m_consent,&SessionConsent::status,this,[this](const QString &cn,const QString &en){log(cn,en);});
@@ -52,15 +53,17 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
 #endif
  connect(qApp,&QGuiApplication::applicationStateChanged,this,[this](Qt::ApplicationState state){setUpdatesEnabled(state!=Qt::ApplicationSuspended);});
  QSettings s;if(s.value("token").toString().size()<6)s.setValue("token",QString::number(QRandomGenerator::system()->bounded(100000000,999999999)));
- loadSettings();QStringList ips;for(const auto &address:QNetworkInterface::allAddresses())if(address.protocol()==QAbstractSocket::IPv4Protocol&&!address.isLoopback())ips<<address.toString();cfg->addresses->setText("本机局域网 IP："+ips.join(", ")+"\nUSB / Wi-Fi · TCP 27183");
+ loadSettings();
  auto *modeGroup=new QButtonGroup(this);modeGroup->addButton(ui->duplicate);modeGroup->addButton(ui->extend);modeGroup->setExclusive(true);if(s.value("castMode",0).toInt()==1)ui->extend->setChecked(true);
  connect(m_castControl,&CastControl::startRequested,this,&MainWindow::start);connect(m_castControl,&CastControl::stopRequested,this,&MainWindow::stop);
  connect(ui->settings,&QPushButton::clicked,this,&MainWindow::openSettings);connect(ui->maximize,&QPushButton::clicked,this,&MainWindow::maximize);
- connect(m_presentation,&Presentation::changed,this,[this](bool on){furinaSetMaximizeIcon(ui->maximize,on||m_remoteMax);});
+ connect(m_presentation,&Presentation::changed,this,[this](bool on){furinaSetMaximizeIcon(ui->maximize,on||m_remoteMax);updateVideoGeometry();});
  connect(m_direction,&DirectionChoice::changed,this,&MainWindow::directionChanged);
  auto modeChanged=[this](bool checked){if(m_castUi->locked()){m_castUi->preserveSelection();return;}if(checked&&(m_sessionActive||m_consent->pending()))stop();};connect(ui->duplicate,&QCheckBox::toggled,this,modeChanged);connect(ui->extend,&QCheckBox::toggled,this,modeChanged);
  connect(m_settings,&QDialog::accepted,this,[this]{if(m_castUi->locked()){loadSettings();log("投屏方式已锁定，请点击停止后修改设置。","Casting options are locked. Press Stop to change settings.");return;}stop();saveSettings();log("设置已保存，请按开始重新启动服务。","Settings saved. Press Start to restart the service.");});
  connect(m_settings,&QDialog::rejected,this,&MainWindow::loadSettings);
+ connect(cfg->usbSettings,&QPushButton::clicked,&m_android,&AndroidBridge::usbSettings);
+ connect(cfg->refreshAddresses,&QPushButton::clicked,this,&MainWindow::refreshAddresses);
  connect(cfg->accessibility,&QPushButton::clicked,&m_android,&AndroidBridge::accessibility);
  connect(&m_peer,&Peer::status,this,[this](const QString &message){log(message);});
  connect(&m_android,&AndroidBridge::status,this,[this](const QString &message){log(message);m_peer.sendStatus(message);});
@@ -88,9 +91,20 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
 }
 MainWindow::~MainWindow(){m_tick.stop();stop();saveSettings();delete cfg;delete ui;}
 void MainWindow::log(const QString &message,const QString &english){const auto entry=furinaLog(message,english);if(!entry.isEmpty())ui->log->appendPlainText(entry);}
-void MainWindow::loadSettings(){QSettings s;if(!m_castUi->locked()){{const QSignalBlocker block(m_resolution);m_resolution->setValue(s.value("resolution",0).toInt());}fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);}cfg->host->setText(s.value("host","0.0.0.0").toString());cfg->serial->setText(s.value("serial",m_android.deviceCode()).toString());cfg->token->setText(s.value("token").toString());cfg->allowControl->setChecked(s.value("allowControl",false).toBool());}
-void MainWindow::saveSettings(){QSettings s;s.setValue("resolution",m_resolution->value());s.setValue("host",cfg->host->text());s.setValue("serial",cfg->serial->text());s.setValue("token",cfg->token->text());s.setValue("allowControl",cfg->allowControl->isChecked());s.setValue("castMode",ui->extend->isChecked()?1:0);}
+void MainWindow::loadSettings(){QSettings s;if(!m_castUi->locked()){{const QSignalBlocker block(m_resolution);m_resolution->setValue(s.value("resolution",0).toInt());}fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);}cfg->connectionTabs->setCurrentIndex(s.value("connectionTab",0).toInt()==1?1:0);cfg->host->setText(s.value("host","0.0.0.0").toString());cfg->serial->setText(s.value("serial",m_android.deviceCode()).toString());cfg->token->setText(s.value("token").toString());cfg->allowControl->setChecked(s.value("allowControl",false).toBool());}
+void MainWindow::saveSettings(){QSettings s;s.setValue("resolution",m_resolution->value());s.setValue("connectionTab",cfg->connectionTabs->currentIndex());s.setValue("host",cfg->host->text());s.setValue("serial",cfg->serial->text());s.setValue("token",cfg->token->text());s.setValue("allowControl",cfg->allowControl->isChecked());s.setValue("castMode",ui->extend->isChecked()?1:0);}
+void MainWindow::refreshAddresses(){
+ QStringList usb,other;
+ for(const auto &interface:QNetworkInterface::allInterfaces()){
+  if(!(interface.flags()&QNetworkInterface::IsUp))continue;
+  const auto name=interface.name();const bool wired=name.startsWith("rndis")||name.startsWith("usb")||name.startsWith("ncm");
+  for(const auto &entry:interface.addressEntries())if(entry.ip().protocol()==QAbstractSocket::IPv4Protocol&&!entry.ip().isLoopback())(wired?usb:other)<<entry.ip().toString();
+ }
+ cfg->usbAddresses->setText(usb.isEmpty()?"USB IP：未就绪":"USB IP："+usb.join(", "));
+ cfg->addresses->setText("本机 IP："+(other.isEmpty()?QString("未连接"):other.join(", ")));
+}
 void MainWindow::openSettings(){
+ refreshAddresses();
 #ifdef Q_OS_ANDROID
  const auto size=ui->contentPanel->size();m_settings->resize(qMin(560,size.width()-24),qMin(620,size.height()-24));m_settings->move((size.width()-m_settings->width())/2,(size.height()-m_settings->height())/2);ui->sidebar->setEnabled(false);ui->viewPanel->setEnabled(false);ui->bottomPanel->setEnabled(false);m_settings->show();m_settings->raise();updateVideoGeometry();
 #else
@@ -102,10 +116,15 @@ void MainWindow::start(){
  if(!ui->share->isChecked()&&!ui->receive->isChecked()){log("请先勾选分享或获取屏幕。","Select Share or Receive first.");return;}
  if(m_peer.ready()){m_pending=false;requestDirection();return;}
  if(cfg->token->text().size()<6){log("请填写至少 6 位的配对码。","Enter a pairing code with at least 6 characters.");openSettings();return;}
- if(!m_listening){m_listening=m_peer.listen(27183,cfg->token->text(),cfg->host->text());if(!m_listening)return;saveSettings();}
+ if(!m_listening){
+  const auto bind=cfg->connectionTabs->currentIndex()==0?QString("0.0.0.0"):cfg->host->text();
+  m_listening=m_peer.listen(27183,cfg->token->text(),bind);if(!m_listening)return;
+  if(!m_discovery.start(bind))log("自动发现不可用，请在电脑手填平板 USB IP。","Discovery is unavailable. Enter the tablet USB IP on the PC.");
+  refreshAddresses();saveSettings();
+ }
  m_pending=true;m_castUi->lockPending();log("开始等待对端同意。","Starting: waiting for the other device to approve.");log("服务已启动，等待电脑连接。","Service started. Waiting for the PC connection.");
 }
-void MainWindow::stop(){m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close();m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);}
+void MainWindow::stop(){m_discovery.stop();m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close(true);m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);}
 void MainWindow::startCapture(){if(!m_peer.ready()||m_sharing||!m_consent->active()||!m_consent->sharing())return;m_sharing=true;m_remoteFps=60;m_remoteQueue=0;m_remoteWorkMs=0;m_encodeWorkMs=0;fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);m_android.startCapture();log("正在请求平板录屏授权。","Requesting tablet screen capture permission.");}
 void MainWindow::stopCapture(){m_sharing=false;m_android.wantFrame=false;m_android.stopCapture();}
 void MainWindow::directionChanged(){

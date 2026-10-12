@@ -32,6 +32,13 @@ void AndroidBridge::stopCapture(){wantFrame=false;
  QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","stopCapture","()V");
 #endif
 }
+void AndroidBridge::usbSettings(){
+#ifdef Q_OS_ANDROID
+ QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","openUsbSettings","()V");
+#else
+ emit status("USB 网络共享需在 Android 系统设置中开启。\nEnable USB tethering in Android system settings.");
+#endif
+}
 void AndroidBridge::accessibility(){
 #ifdef Q_OS_ANDROID
  QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","openAccessibility","()V");

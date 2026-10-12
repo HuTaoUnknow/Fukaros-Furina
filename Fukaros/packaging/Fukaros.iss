@@ -7,7 +7,7 @@
 [Setup]
 AppId={{0FDE6CAB-CF9D-4B29-82B7-4D7C951C6141}
 AppName=Fukaros
-AppVersion=0.4.4
+AppVersion=0.4.10
 AppPublisher=HuTaoUnknow
 AppPublisherURL=https://github.com/HuTaoUnknow/Fukaros-Furina
 AppSupportURL=https://github.com/HuTaoUnknow/Fukaros-Furina/issues
@@ -20,10 +20,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
-OutputBaseFilename=Fukaros-0.4.4-windows-x64-setup
+OutputBaseFilename=Fukaros-0.4.10-windows-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=app.ico
 UninstallDisplayIcon={app}\Fukaros.exe
 CloseApplications=yes
 RestartApplications=no

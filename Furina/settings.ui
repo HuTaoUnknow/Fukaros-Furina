@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>SettingsDialog</class>
  <widget class="QDialog" name="SettingsDialog">
@@ -9,8 +9,7 @@
    <item>
     <widget class="QLabel" name="sessionSettingsHint">
      <property name="text">
-      <string>投屏期间仅清晰度可调整，点击停止后可修改连接参数。
-Only resolution can change while casting. Press Stop to edit connection settings.</string>
+      <string>投屏中 · 点击停止后可修改设置</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
@@ -27,30 +26,90 @@ Only resolution can change while casting. Press Stop to edit connection settings
      </property>
      <widget class="QWidget" name="settingsContents">
       <layout class="QVBoxLayout" name="settingsLayout">
+       <property name="sizeConstraint">
+        <enum>QLayout::SetMinimumSize</enum>
+       </property>
+       <property name="spacing">
+        <number>10</number>
+       </property>
        <item>
         <widget class="QGroupBox" name="pairingGroup">
          <property name="title">
-          <string>配对设置（USB / Wi-Fi 共用）</string>
+          <string>配对</string>
          </property>
          <layout class="QVBoxLayout" name="pairingGroupLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
           <item>
-           <layout class="QFormLayout" name="pairingForm">
-            <item row="0" column="0">
+           <layout class="QHBoxLayout" name="tokenRow">
+            <item>
              <widget class="QLabel" name="tokenLabel">
               <property name="text">
-               <string>配对码</string>
+               <string>配对码 *</string>
               </property>
               <property name="wordWrap">
                <bool>true</bool>
               </property>
              </widget>
             </item>
-            <item row="0" column="1">
+            <item>
              <widget class="QLineEdit" name="token">
               <property name="placeholderText">
                <string>至少 6 位，与对端一致</string>
               </property>
+              <property name="readOnly">
+               <bool>false</bool>
+              </property>
              </widget>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="pairingHelpLayout">
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <spacer name="pairingHelpSpring">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeType">
+                 <enum>QSizePolicy::Minimum</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>0</width>
+                  <height>16</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="StepHelpButton" name="pairingHelp">
+                <property name="helpTitle" stdset="0">
+                 <string>配对设置</string>
+                </property>
+                <property name="steps" stdset="0">
+                 <string>1. 在平板 Furina 的设置中查看配对码。
+2. 在电脑 Fukaros 填入相同的配对码，至少 6 位。
+3. 保存两端设置，再选择投屏方向并按开始。
+4. 对端点击“同意”后开始投屏。</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
            </layout>
           </item>
@@ -64,49 +123,221 @@ Only resolution can change while casting. Press Stop to edit connection settings
            <string>USB 有线</string>
           </attribute>
           <layout class="QVBoxLayout" name="usbPageLayout">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <property name="sizeConstraint">
+            <enum>QLayout::SetMinimumSize</enum>
+           </property>
            <item>
-            <layout class="QFormLayout" name="usbPageForm">
-             <item row="0" column="0">
-              <widget class="QLabel" name="serialLabel">
-               <property name="text">
-                <string>本机设备码</string>
-               </property>
-               <property name="wordWrap">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QLineEdit" name="serial">
-               <property name="placeholderText">
-                <string>设备标识</string>
-               </property>
-               <property name="readOnly">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="usbPrimaryGroup">
+             <property name="title">
+              <string>USB 连接</string>
+             </property>
+             <property name="settingsRole" stdset="0">
+              <string>required</string>
+             </property>
+             <layout class="QVBoxLayout" name="usbPrimaryGroupLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <layout class="QHBoxLayout" name="usbConnectionActions">
+                <item>
+                 <widget class="QPushButton" name="usbSettings">
+                  <property name="text">
+                   <string>网络共享设置</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QVBoxLayout" name="usbStepsLayout">
+                  <property name="spacing">
+                   <number>0</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <spacer name="usbStepsSpring">
+                    <property name="orientation">
+                     <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Minimum</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>0</width>
+                      <height>16</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="StepHelpButton" name="usbSteps">
+                    <property name="helpTitle" stdset="0">
+                     <string>USB 操作步骤</string>
+                    </property>
+                    <property name="steps" stdset="0">
+                     <string>1. 接好支持数据传输的 USB 数据线。
+2. 点击“网络共享设置”，在系统设置打开 USB 网络共享。
+3. 返回 Furina，保存设置后按开始。
+4. 电脑选择 USB 网络，填写相同配对码，保存后按开始。
+5. 点击对端同意按钮后开始投屏。
+6. 自动发现失败时点击“刷新 IP”，将 USB IP 填到电脑 USB 页。
+7. 此模式不需要 USB 调试，但仍需要开启 USB 网络共享。</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="usbAddressRow">
+                <item>
+                 <widget class="QLabel" name="usbAddresses">
+                  <property name="text">
+                   <string>USB IP：未就绪</string>
+                  </property>
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="refreshAddresses">
+                  <property name="text">
+                   <string>刷新 IP</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
            </item>
            <item>
-            <widget class="QLabel" name="deviceHint">
-             <property name="text">
-              <string>此设备码用于标识本机；电脑端使用 ADB 序列号，可通过刷新 USB 设备获取。</string>
+            <widget class="QFrame" name="usbSeparator">
+             <property name="frameShape">
+              <enum>QFrame::HLine</enum>
              </property>
-             <property name="wordWrap">
-              <bool>true</bool>
+             <property name="frameShadow">
+              <enum>QFrame::Plain</enum>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QLabel" name="usbHint">
-             <property name="text">
-              <string>USB 无需填写 IP。打开 USB 调试并允许电脑授权，电脑设置选择 USB 即可连接。</string>
+            <widget class="QGroupBox" name="usbDebugGroup">
+             <property name="title">
+              <string>可选 · 调试</string>
              </property>
-             <property name="wordWrap">
-              <bool>true</bool>
+             <property name="settingsRole" stdset="0">
+              <string>optional</string>
              </property>
+             <layout class="QVBoxLayout" name="usbDebugGroupLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <layout class="QHBoxLayout" name="serialRow">
+                <item>
+                 <widget class="QLabel" name="serialLabel">
+                  <property name="text">
+                   <string>设备标识</string>
+                  </property>
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLineEdit" name="serial">
+                  <property name="placeholderText">
+                   <string>自动获取</string>
+                  </property>
+                  <property name="readOnly">
+                   <bool>true</bool>
+                  </property>
+                  <property name="settingsRole" stdset="0">
+                   <string>optional</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QVBoxLayout" name="deviceHelpLayout">
+                  <property name="spacing">
+                   <number>0</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <spacer name="deviceHelpSpring">
+                    <property name="orientation">
+                     <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Minimum</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>0</width>
+                      <height>16</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="StepHelpButton" name="deviceHelp">
+                    <property name="helpTitle" stdset="0">
+                     <string>设备标识</string>
+                    </property>
+                    <property name="steps" stdset="0">
+                     <string>此标识自动获取，用于日志识别。
+USB 网络连接只需配对码，无需填写设备标识。
+ADB 兼容模式的序列号由电脑刷新设备获取。</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </item>
+             </layout>
             </widget>
+           </item>
+           <item>
+            <spacer name="usbPageStretch">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>0</width>
+               <height>0</height>
+              </size>
+             </property>
+            </spacer>
            </item>
           </layout>
          </widget>
@@ -115,46 +346,202 @@ Only resolution can change while casting. Press Stop to edit connection settings
            <string>Wi-Fi 无线</string>
           </attribute>
           <layout class="QVBoxLayout" name="wifiPageLayout">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <property name="sizeConstraint">
+            <enum>QLayout::SetMinimumSize</enum>
+           </property>
            <item>
-            <layout class="QFormLayout" name="wifiPageForm">
-             <item row="0" column="0">
-              <widget class="QLabel" name="hostLabel">
-               <property name="text">
-                <string>IP 地址（监听）</string>
-               </property>
-               <property name="wordWrap">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QLineEdit" name="host">
-               <property name="placeholderText">
-                <string>0.0.0.0 = 所有本机地址</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="wifiRequiredGroup">
+             <property name="title">
+              <string>Wi-Fi 连接</string>
+             </property>
+             <property name="settingsRole" stdset="0">
+              <string>required</string>
+             </property>
+             <layout class="QVBoxLayout" name="wifiRequiredGroupLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <layout class="QHBoxLayout" name="wifiAddressRow">
+                <item>
+                 <widget class="QLabel" name="addresses">
+                  <property name="text">
+                   <string>本机 IP：未连接</string>
+                  </property>
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QVBoxLayout" name="wifiStepsLayout">
+                  <property name="spacing">
+                   <number>0</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <spacer name="wifiStepsSpring">
+                    <property name="orientation">
+                     <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Minimum</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>0</width>
+                      <height>16</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="StepHelpButton" name="wifiSteps">
+                    <property name="helpTitle" stdset="0">
+                     <string>Wi-Fi 操作步骤</string>
+                    </property>
+                    <property name="steps" stdset="0">
+                     <string>1. 两端连接同一局域网。
+2. 将此页显示的本机 IP 填到电脑的 Wi-Fi 设置。
+3. 两端配对码相同，保存后在 Furina 按开始。
+4. 电脑选择方向并按开始，待对端点击同意。
+5. 下方监听 IP 默认 0.0.0.0，无需修改。</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
            </item>
            <item>
-            <widget class="QLabel" name="addresses">
-             <property name="text">
-              <string>本机局域网 IP</string>
+            <widget class="QFrame" name="wifiSeparator">
+             <property name="frameShape">
+              <enum>QFrame::HLine</enum>
              </property>
-             <property name="wordWrap">
-              <bool>true</bool>
+             <property name="frameShadow">
+              <enum>QFrame::Plain</enum>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QLabel" name="wifiHint">
-             <property name="text">
-              <string>电脑填写本机局域网 IP。默认监听 0.0.0.0，同一服务接受 USB 与 Wi-Fi 连接。</string>
+            <widget class="QGroupBox" name="wifiDebugGroup">
+             <property name="title">
+              <string>可选 · 调试</string>
              </property>
-             <property name="wordWrap">
-              <bool>true</bool>
+             <property name="settingsRole" stdset="0">
+              <string>optional</string>
              </property>
+             <layout class="QVBoxLayout" name="wifiDebugGroupLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <layout class="QHBoxLayout" name="hostRow">
+                <item>
+                 <widget class="QLabel" name="hostLabel">
+                  <property name="text">
+                   <string>监听 IP</string>
+                  </property>
+                  <property name="wordWrap">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLineEdit" name="host">
+                  <property name="placeholderText">
+                   <string>默认 0.0.0.0</string>
+                  </property>
+                  <property name="readOnly">
+                   <bool>false</bool>
+                  </property>
+                  <property name="settingsRole" stdset="0">
+                   <string>optional</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QVBoxLayout" name="listenHelpLayout">
+                  <property name="spacing">
+                   <number>0</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <spacer name="listenHelpSpring">
+                    <property name="orientation">
+                     <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Minimum</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>0</width>
+                      <height>16</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="StepHelpButton" name="listenHelp">
+                    <property name="helpTitle" stdset="0">
+                     <string>监听 IP（可选）</string>
+                    </property>
+                    <property name="steps" stdset="0">
+                     <string>1. 默认保持 0.0.0.0，同时接受所有本机 IPv4 接口。
+2. 只有调试或限制监听网卡时，才填写本机的指定 IP。
+3. 此字段是平板监听地址，不是电脑 IP。
+4. 使用 USB 页开始时，服务自动监听所有 IPv4 接口。</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </item>
+             </layout>
             </widget>
+           </item>
+           <item>
+            <spacer name="wifiPageStretch">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>0</width>
+               <height>0</height>
+              </size>
+             </property>
+            </spacer>
            </item>
           </layout>
          </widget>
@@ -166,41 +553,87 @@ Only resolution can change while casting. Press Stop to edit connection settings
           <enum>QFrame::HLine</enum>
          </property>
          <property name="frameShadow">
-          <enum>QFrame::Sunken</enum>
+          <enum>QFrame::Plain</enum>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QGroupBox" name="controlGroup">
          <property name="title">
-          <string>远程触控设置</string>
+          <string>可选 · 远程控制</string>
          </property>
          <layout class="QVBoxLayout" name="controlGroupLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
           <item>
-           <widget class="QPushButton" name="accessibility">
-            <property name="text">
-             <string>开启无障碍触控服务</string>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="controlActions">
+            <item>
+             <widget class="QPushButton" name="accessibility">
+              <property name="text">
+               <string>触控授权</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="controlHelpLayout">
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <spacer name="controlHelpSpring">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeType">
+                 <enum>QSizePolicy::Minimum</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>0</width>
+                  <height>16</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="StepHelpButton" name="controlHelp">
+                <property name="helpTitle" stdset="0">
+                 <string>远程触控</string>
+                </property>
+                <property name="steps" stdset="0">
+                 <string>1. 仅查看画面无需开启此功能。
+2. 如需电脑操作平板，点击“触控授权”。
+3. 在系统无障碍设置中开启 Furina 远程触控。
+4. 返回并勾选“允许远程控制”，保存设置。
+5. 只有已配对并获同意的投屏连接可以回传操作。</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
           </item>
           <item>
            <widget class="QCheckBox" name="allowControl">
             <property name="text">
-             <string>允许已配对电脑点击、滑动和导航</string>
+             <string>允许远程控制</string>
             </property>
            </widget>
           </item>
          </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="connectionHint">
-         <property name="text">
-          <string>先配置连接参数并保存，再按开始。投屏开始后点击停止才能改变投屏方式。</string>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
         </widget>
        </item>
       </layout>
@@ -208,11 +641,87 @@ Only resolution can change while casting. Press Stop to edit connection settings
     </widget>
    </item>
    <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="standardButtons">
-      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Save</set>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="settingsFooter">
+     <item>
+      <widget class="QLabel" name="stepsLabel">
+       <property name="text">
+        <string>操作帮助</string>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="connectionHelpLayout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <spacer name="connectionHelpSpring">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Minimum</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>16</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="StepHelpButton" name="connectionHelp">
+         <property name="helpTitle" stdset="0">
+          <string>开始 / 停止</string>
+         </property>
+         <property name="steps" stdset="0">
+          <string>1. 先填写绿色区域，并保存设置；黄色区域通常可保留默认值。
+2. 主界面选择分享或获取屏幕，再选择复制/扩展和清晰度。
+3. 点击 ▶ 开始，转圈时等待连接和对端同意。
+4. 连接后点击 ‖ 停止，两端同步停止。
+5. 投屏期间仅清晰度可修改，要更换方向或连接参数，请先停止。</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <spacer name="settingsFooterStretch">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>12</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="buttonBox">
+       <property name="standardButtons">
+        <set>QDialogButtonBox::Cancel|QDialogButtonBox::Save</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>
@@ -231,4 +740,11 @@ Only resolution can change while casting. Press Stop to edit connection settings
    <slot>reject()</slot>
   </connection>
  </connections>
+ <customwidgets>
+  <customwidget>
+   <class>StepHelpButton</class>
+   <extends>QPushButton</extends>
+   <header>settings_support.h</header>
+  </customwidget>
+ </customwidgets>
 </ui>

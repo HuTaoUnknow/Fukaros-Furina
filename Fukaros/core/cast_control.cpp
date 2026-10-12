@@ -36,7 +36,9 @@ CastControl::CastControl(QWidget *window,CastUiState *casting,Peer *peer):QObjec
  refresh();
 }
 void CastControl::refresh(){
- m_state=m_casting->occupied()||m_peer->ready()?Stop:m_casting->locked()?Waiting:Start;
+ // A paired transport may remain connected after cancellation or rejection.
+ // Only an occupied casting session shows Stop; pending consent shows Waiting.
+ m_state=m_casting->occupied()?Stop:m_casting->locked()?Waiting:Start;
  const QString label=m_state==Start?QStringLiteral("开始"):m_state==Waiting?QStringLiteral("等待（点击取消）"):QStringLiteral("停止");
  m_button->setToolTip(label);m_button->setAccessibleName(label);m_button->setProperty("castState",m_state==Start?"start":m_state==Waiting?"waiting":"stop");
  if(m_state==Waiting){if(!m_animation.isActive()){m_angle=0;m_animation.start();}}else m_animation.stop();

@@ -136,6 +136,24 @@ QString furinaStyle(){return QStringLiteral(R"(
  QScrollBar:horizontal { height:8px; background:#17212c; }
  QScrollBar::handle:horizontal { background:#415267; min-width:25px; }
  QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal { width:0px; }
+
+ QGroupBox[settingsRole="required"] { background:#14251f; border-color:#3d6453; }
+ QGroupBox[settingsRole="optional"] { background:#27241c; border-color:#6c6240; }
+ QGroupBox[settingsRole="required"] QLabel { background:transparent; color:#d9e6df; }
+ QGroupBox[settingsRole="optional"] QLabel,QGroupBox[settingsRole="optional"] QCheckBox { background:transparent; color:#e4ddc7; }
+ QLineEdit[settingsRole="required"] { background:#1a3027; border-color:#4f8068; color:#e4eee8; }
+ QLineEdit[settingsRole="optional"],QGroupBox[settingsRole="optional"] QComboBox { background:#302b20; border-color:#6c6240; color:#eae4d3; }
+ QLineEdit[settingsRole="required"]:focus { border:2px solid #6f9b81; }
+ QLineEdit[settingsRole="optional"]:focus { border:2px solid #9b8b55; }
+ QPushButton[stepHelp="true"] { background:transparent; border:0; min-width:32px; max-width:32px; min-height:16px; max-height:16px; padding:0; font-size:16px; }
+ QPushButton[stepHelp="true"]:hover { background:transparent; color:#a5e8fa; }
+ QPushButton[stepHelp="true"]:pressed { background:transparent; color:#57b9d8; }
+ QFrame[stepPopup="true"] { background:#203044; border:1px solid #77bdd9; border-radius:8px; }
+ QFrame[stepPopup="true"] QWidget { background:transparent; }
+ QLabel#stepsTitle { font-size:15px; font-weight:bold; color:#f5faff; }
+ QLabel#stepsBody { color:#eaf3ff; padding:2px; }
+ QPushButton#closeSteps { min-width:32px; max-width:32px; min-height:32px; max-height:32px; padding:0; font-size:20px; }
+ QFrame#usbSeparator,QFrame#wifiSeparator { border:0; border-top:1px solid #73837b; min-height:1px; max-height:1px; }
 )");}
 QString furinaStatus(const QString &cn,const QString &en){return cn+"\nEN: "+en;}
 void FurinaComboBox::paintEvent(QPaintEvent *event){
