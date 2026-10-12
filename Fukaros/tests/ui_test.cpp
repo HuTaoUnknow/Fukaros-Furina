@@ -31,6 +31,12 @@ public:int opened=0;QUrl last;
 class UiTest:public QObject{
  Q_OBJECT
 private slots:
+ void chineseDebugParameters(){
+  const QString english="width=1920 height=1080 fps=60 latency=3 ms target=60 FPS codec=h264 GPU=1.5 ms";
+  const auto entry=furinaLog(english,english);const auto chinese=entry.section('\n',0,0);
+  for(const auto *word:{"宽度=1920","高度=1080","帧率=60","延迟=3 毫秒","目标=60 帧/秒","编解码器=h264","图形处理器=1.5 毫秒"})QVERIFY2(chinese.contains(QString::fromUtf8(word)),qPrintable(chinese));
+  QVERIFY(entry.section('\n',1).endsWith(english));
+ }
  void initTestCase(){QCoreApplication::setOrganizationName("FurinaTests");QCoreApplication::setApplicationName("FukarosUi60");}
  void nativeExtensionPositionFlow(){
   if(QGuiApplication::platformName()!="windows"||!fr_virtual_available())QSKIP("Requires the installed Windows virtual display driver");
@@ -71,7 +77,7 @@ private slots:
   for(auto *process:w.findChildren<QProcess*>())QCOMPARE(process->state(),QProcess::NotRunning);
   button->click();QCOMPARE(control->state(),CastControl::Start);QVERIFY(w.findChild<QComboBox*>("usbMode")->isEnabled());
   w.findChild<QLineEdit*>("usbHost")->setText("invalid-ip");button->click();QCOMPARE(control->state(),CastControl::Start);
-  QVERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("USB 平板 IP 无效"));
+  QVERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("有线 平板 网络地址 无效"));
  }
 
  void stopSynchronization_data(){

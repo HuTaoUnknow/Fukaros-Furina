@@ -23,6 +23,72 @@ class UiTest:public QObject{
 private slots:
  void initTestCase(){QCoreApplication::setOrganizationName("FurinaTests");QCoreApplication::setApplicationName("FurinaUi60");}
 
+ void portraitLayoutAndConsent(){
+  MainWindow w;w.resize(390,780);w.show();
+  auto *toolbar=w.findChild<QWidget*>("portraitToolbar"),*tabs=w.findChild<QWidget*>("portraitTabs");
+  auto *modes=w.findChild<QCheckBox*>("showCasting"),*logs=w.findChild<QCheckBox*>("showDebug");
+  auto *direction=w.findChild<QWidget*>("directionPanel"),*debug=w.findChild<QWidget*>("debugPanel");
+  auto *view=w.findChild<ScreenView*>();auto *start=w.findChild<QPushButton*>("start");
+  QTRY_VERIFY(toolbar->isVisible());QVERIFY(!w.findChild<QWidget*>("sidebar")->isVisible());
+  QCOMPARE(start->parentWidget(),toolbar);QVERIFY(start->x()<w.findChild<QPushButton*>("settings")->x());
+  QVERIFY(w.findChild<QPushButton*>("settings")->x()<w.findChild<QPushButton*>("maximize")->x());
+  QVERIFY(modes->isChecked()&&direction->isVisible()&&!debug->isVisible());
+  for(const QSize size:{QSize(360,640),QSize(390,780),QSize(600,960)}){
+   w.resize(size);QTest::qWait(20);
+   for(const char *name:{"portraitToolbar","portraitTabs","directionPanel","resolutionPanel"}){
+    auto *panel=w.findChild<QWidget*>(name);QVERIFY(w.rect().contains(QRect(panel->mapTo(&w,QPoint()),panel->size())));
+   }
+   QVERIFY(view->mapTo(&w,QPoint()).y()<toolbar->mapTo(&w,QPoint()).y());
+   QVERIFY(toolbar->mapTo(&w,QPoint()).y()<tabs->mapTo(&w,QPoint()).y());
+   w.grab().save(QString("mobile-portrait-modes-%1.png").arg(size.width()));
+  }
+  w.resize(390,780);QImage image(1920,1080,QImage::Format_RGB32);image.fill(QColor("#286987"));view->setImage(image);
+  logs->click();QVERIFY(logs->isChecked()&&!modes->isChecked()&&debug->isVisible()&&!direction->isVisible());
+  w.findChild<AndroidBridge*>()->videoStats(false,60,1.5,0,59.8,1920,1080,1000);
+  auto *text=w.findChild<QPlainTextEdit*>("log");QVERIFY(text->toPlainText().contains("解码帧率 60.0 帧/秒"));
+  QVERIFY(text->toPlainText().contains("display 59.8 FPS"));QVERIFY(view->hasImage());
+  w.grab().save("mobile-portrait-debug.png");logs->click();QVERIFY(logs->isChecked());
+  modes->click();
+  // Approval stays accessible even when the log page is hidden.
+  Peer other;QVERIFY(other.listen(29905,"portrait-consent-code"));
+  auto *peer=w.findChild<Peer*>();peer->connectTo("127.0.0.1",29905,"portrait-consent-code");QTRY_VERIFY(other.ready()&&peer->ready());
+  other.sendApproval(4501,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);
+  auto *consent=w.findChild<QWidget*>("consentPanel");QTRY_VERIFY(consent->isVisible());
+  QVERIFY(!debug->isVisible());QVERIFY(w.rect().contains(QRect(consent->mapTo(&w,QPoint()),consent->size())));
+  w.grab().save("mobile-portrait-consent.png");w.findChild<QPushButton*>("consentReject")->click();QTRY_VERIFY(!consent->isVisible());
+  other.close();QTRY_VERIFY(!peer->ready());view->setImage(image);
+  w.findChild<QPushButton*>("maximize")->click();QTRY_VERIFY(w.isFullScreen());
+  QVERIFY(!toolbar->isVisible()&&!tabs->isVisible()&&!w.findChild<QWidget*>("bottomPanel")->isVisible());
+  QTRY_COMPARE(view->size(),w.centralWidget()->size());view->leaveFullScreen();QTRY_VERIFY(!w.isFullScreen());
+  w.resize(780,390);QTest::qWait(20);QVERIFY(!toolbar->isVisible()&&!tabs->isVisible());
+  QVERIFY(w.findChild<QWidget*>("sidebar")->isVisible()&&direction->isVisible()&&debug->isVisible());
+  QCOMPARE(start->parentWidget(),w.findChild<QWidget*>("sidebar"));
+  w.resize(390,780);QTest::qWait(20);QVERIFY(toolbar->isVisible()&&direction->isVisible()&&!debug->isVisible());
+  QVERIFY(view->hasImage());
+ }
+
+ void chineseDebugParameters(){
+  const QString english="width=1080 height=1920 fps=60 queueMs=16 bitrate=12 Mbps codec=c2.qti.avc.decoder GPU=2 ms";
+  const auto entry=furinaLog(english,english);const auto chinese=entry.section('\n',0,0);
+  for(const auto *word:{"宽度=1080","高度=1920","帧率=60","队列时长=16","码率=12 兆比特/秒","编解码器=c2.qti.avc.decoder","图形处理器=2 毫秒"})QVERIFY2(chinese.contains(QString::fromUtf8(word)),qPrintable(chinese));
+  QVERIFY(entry.section('\n',1).endsWith(english));
+  QVERIFY(QRegularExpression("^\\[\\d{2}:\\d{2}:\\d{2}\\] 中 · ").match(chinese).hasMatch());
+ }
+ void extensionOrientationIsFixedUntilStop(){
+  MainWindow w;w.resize(390,780);w.show();auto *bridge=w.findChild<AndroidBridge*>();auto *consent=w.findChild<SessionConsent*>();auto *peer=w.findChild<Peer*>();
+  Peer other;QSignalSpy approvals(&other,&Peer::approval);QVERIFY(other.listen(29907,"extension-lock-code"));peer->connectTo("127.0.0.1",29907,"extension-lock-code");QTRY_VERIFY(peer->ready()&&other.ready());
+  other.sendApproval(4601,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE|FR_APPROVAL_EXTEND);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();
+  QTRY_VERIFY(consent->active());QTRY_COMPARE(approvals.count(),1);QVERIFY(approvals.last()[2].toUInt()&FR_APPROVAL_PORTRAIT);
+  QCOMPARE(bridge->property("extensionOrientation").toInt(),1);QVERIFY(consent->portrait());
+  w.resize(780,390);QTest::qWait(20);QVERIFY(consent->portrait());QCOMPARE(bridge->property("extensionOrientation").toInt(),1);
+  w.findChild<QPushButton*>("start")->click();QTRY_VERIFY(!other.ready());QCOMPARE(bridge->property("extensionOrientation").toInt(),-1);
+  peer->connectTo("127.0.0.1",29907,"extension-lock-code");QTRY_VERIFY(peer->ready()&&other.ready());
+  other.sendApproval(4602,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE|FR_APPROVAL_EXTEND);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();
+  QTRY_VERIFY(consent->active());QVERIFY(!consent->portrait());QCOMPARE(bridge->property("extensionOrientation").toInt(),0);
+  other.close();QTRY_VERIFY(!peer->ready());QCOMPARE(bridge->property("extensionOrientation").toInt(),0);
+  w.findChild<QPushButton*>("start")->click();QCOMPARE(bridge->property("extensionOrientation").toInt(),-1);
+ }
+
  void stepsAndRequiredFields(){
   MainWindow w;w.show();w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());
   QVERIFY(!w.findChild<QLineEdit*>("token")->property("settingsRole").isValid());

@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include "peer.h"
+#include <functional>
 
 // Authentication establishes the connection; this separately authorizes one
 // direction for one casting session. IDs reject late replies after cancellation.
@@ -13,6 +14,8 @@ class SessionConsent : public QObject {
 public:
  SessionConsent(Peer *peer,QWidget *window);
  bool request(bool sharing,bool extended);
+ void setReceiverOrientation(std::function<bool()> portrait){m_receiverPortrait=std::move(portrait);}
+ bool portrait()const{return (m_options&FR_APPROVAL_PORTRAIT)!=0;}
  void cancel();
  // Keep new requests blocked after an occupied connection is lost until Stop.
  void setRequestsBlocked(bool blocked){m_requestsBlocked=blocked;}
@@ -29,5 +32,6 @@ private:
  Peer *m_peer;QWidget *m_panel;QLabel *m_label;QPushButton *m_accept,*m_reject;
  QTimer m_timeout;quint32 m_id=0,m_options=0;
  bool m_waiting=false,m_active=false,m_local=false,m_sharing=false,m_requestsBlocked=false;
+ std::function<bool()> m_receiverPortrait;
  void clear();void answer(bool accept);void handle(quint32 id,quint32 verb,quint32 options);
 };

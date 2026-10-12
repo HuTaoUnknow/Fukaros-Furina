@@ -15,7 +15,7 @@ public:
  QString deviceName() const;
  bool position(QPoint *position) const;
  bool setPosition(const QPoint &position);
- void ensure();
+ void ensure(bool portrait=false);
  void release();
 signals:
  void ready(const QString &screenName);
@@ -24,7 +24,7 @@ signals:
 private:
  fr_virtual_display m_display{};
  QTimer m_poll;QElapsedTimer m_elapsed;
- bool m_preparing=false,m_installing=false;
+ bool m_preparing=false,m_installing=false,m_portrait=false;
  QString m_qtName;
  void *m_installer=nullptr;
  void acquire();void poll();void fail(const QString &cn,const QString &en);

@@ -139,7 +139,7 @@
     </item>
     <item>
      <widget class="QWidget" name="contentPanel">
-      <layout class="QVBoxLayout" name="contentLayout" stretch="1,0">
+      <layout class="QVBoxLayout" name="contentLayout" stretch="1,0,0,0,0">
        <property name="leftMargin">
         <number>0</number>
        </property>
@@ -173,6 +173,112 @@
           <property name="spacing">
            <number>0</number>
           </property>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="portraitToolbar">
+         <layout class="QHBoxLayout" name="portraitToolbarLayout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>10</number>
+          </property>
+          <property name="bottomMargin">
+           <number>10</number>
+          </property>
+          <property name="spacing">
+           <number>12</number>
+          </property>
+          <item>
+           <spacer name="portraitToolSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="portraitConsentHost">
+         <layout class="QVBoxLayout" name="portraitConsentLayout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <property name="spacing">
+           <number>0</number>
+          </property>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="portraitTabs">
+         <layout class="QHBoxLayout" name="portraitTabsLayout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <property name="spacing">
+           <number>24</number>
+          </property>
+          <item>
+           <widget class="QCheckBox" name="showCasting">
+            <property name="text">
+             <string>投屏模式</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="showDebug">
+            <property name="text">
+             <string>调试信息</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="portraitTabsSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
          </layout>
         </widget>
        </item>

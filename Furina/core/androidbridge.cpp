@@ -3,6 +3,7 @@
 #include <QMetaObject>
 #include <QMutex>
 #include <QSysInfo>
+#include <QVariant>
 #include "video_policy.h"
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
@@ -58,6 +59,12 @@ void AndroidBridge::key(quint32 k){
  QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","remoteKey","(I)V",jint(k));
 #else
  emit status(QString("模拟按键 %1").arg(k));
+#endif
+}
+void AndroidBridge::setExtensionOrientation(int direction){
+ setProperty("extensionOrientation",direction);
+#ifdef Q_OS_ANDROID
+ QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","setExtensionOrientation","(I)V",jint(direction));
 #endif
 }
 void AndroidBridge::setCaptureResolution(int edge){

@@ -96,7 +96,7 @@ public final class VideoCore {
             format.setFloat(MediaFormat.KEY_OPERATING_RATE,FPS);
             if(Build.VERSION.SDK_INT>=29)format.setInteger(MediaFormat.KEY_MAX_B_FRAMES,0);
             codec.configure(format,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);surface=codec.createInputSurface();codec.start();activeEncoder=this;
-            FurinaActivity.nativeStatus("Android H.264 硬件编码："+name+"，"+width+"×"+height+"，目标 60 FPS");
+            FurinaActivity.nativeStatus("安卓 H.264 硬件编码：编码器 "+name+"，分辨率 "+width+"×"+height+" 像素，目标帧率 60 帧/秒\nEN: Android hardware H.264 encoding: codec "+name+", resolution "+width+"x"+height+", target 60 FPS");
         }
         public void requestKey(){if(closed)return;waitKey=true;Bundle parameters=new Bundle();parameters.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME,0);try{codec.setParameters(parameters);}catch(Exception ignored){}}
         public void close(){closed=true;if(activeEncoder==this)activeEncoder=null;if(codec!=null){try{codec.stop();}catch(Exception ignored){}codec.release();codec=null;}surface.release();}
@@ -154,7 +154,7 @@ public final class VideoCore {
                     if((flags&KEY)==0){synchronized(queue){if(queue.peek()==packet)queue.poll();waitKey=true;scheduled=false;}FurinaActivity.nativeNeedKey();return;}
                     close();String name=findCodec(false,w,h);if(name==null)throw new IllegalStateException("No hardware decoder supporting "+w+"x"+h+"@60");
                     codec=MediaCodec.createByCodecName(name);MediaFormat format=MediaFormat.createVideoFormat("video/avc",w,h);format.setInteger(MediaFormat.KEY_PRIORITY,0);format.setInteger(MediaFormat.KEY_FRAME_RATE,FPS);if(Build.VERSION.SDK_INT>=30)format.setInteger(MediaFormat.KEY_LOW_LATENCY,1);
-                    codec.configure(format,output,null,0);codec.setOnFrameRenderedListener((c,renderPts,nano)->presented.incrementAndGet(),handler);codec.start();width=w;height=h;epoch=e;FurinaActivity.nativeStatus("Android H.264 硬件解码："+name+"，"+w+"×"+h+"，目标 60 FPS");FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(VideoCore::fit);
+                    codec.configure(format,output,null,0);codec.setOnFrameRenderedListener((c,renderPts,nano)->presented.incrementAndGet(),handler);codec.start();width=w;height=h;epoch=e;FurinaActivity.nativeStatus("安卓 H.264 硬件解码：解码器 "+name+"，分辨率 "+w+"×"+h+" 像素，目标帧率 60 帧/秒\nEN: Android hardware H.264 decoding: codec "+name+", resolution "+w+"x"+h+", target 60 FPS");FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(VideoCore::fit);
                 }
                 long start=System.nanoTime();int index=codec.dequeueInputBuffer(0);
                 if(index>=0){ByteBuffer buffer=codec.getInputBuffer(index);buffer.clear();buffer.put(packet,HEADER,packet.length-HEADER);codec.queueInputBuffer(index,0,packet.length-HEADER,pts,0);synchronized(queue){if(queue.peek()==packet)queue.poll();}}

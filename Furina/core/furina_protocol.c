@@ -12,7 +12,7 @@ int fr_decode_header(const uint8_t *p,fr_header *h){
 }
 int fr_valid_approval(uint32_t id,uint32_t verb,uint32_t options){
  const uint32_t direction=options&3u;
- return id!=0&&verb>=FR_APPROVAL_REQUEST&&verb<=FR_APPROVAL_CANCEL&&(options&~7u)==0&&(direction==FR_APPROVAL_SHARE||direction==FR_APPROVAL_RECEIVE);
+ return id!=0&&verb>=FR_APPROVAL_REQUEST&&verb<=FR_APPROVAL_CANCEL&&(options&~15u)==0&&(!(options&FR_APPROVAL_PORTRAIT)||(options&FR_APPROVAL_EXTEND))&&(direction==FR_APPROVAL_SHARE||direction==FR_APPROVAL_RECEIVE);
 }
 int fr_valid_session_action(uint32_t action){return action>=FR_START_SHARE&&action<=FR_REQUEST_KEY;}
 int fr_encode_gesture(uint8_t *p,const fr_gesture *g){

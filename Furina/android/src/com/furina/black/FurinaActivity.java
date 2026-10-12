@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Build;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.media.projection.MediaProjectionManager;
 import android.media.projection.MediaProjectionConfig;
 import android.provider.Settings;
@@ -12,6 +14,8 @@ import org.qtproject.qt.android.bindings.QtActivity;
 public class FurinaActivity extends QtActivity {
     private static FurinaActivity current;
     private boolean awaitingConsent;
+    private boolean extensionOrientationLocked;
+    private int previousRequestedOrientation;
     private static final int CAPTURE_REQUEST = 8301;
     public static native boolean nativeWantFrame();
     public static native void nativeFrame(byte[] jpeg);
@@ -30,6 +34,22 @@ public class FurinaActivity extends QtActivity {
         if(a==null)return "";
         String code=Settings.Secure.getString(a.getContentResolver(),Settings.Secure.ANDROID_ID);
         return code==null?"":code;
+    }
+    public static void setExtensionOrientation(int direction) {
+        final FurinaActivity a=current;
+        if(a==null)return;
+        a.runOnUiThread(() -> {
+            if(direction<0){
+                if(a.extensionOrientationLocked){a.extensionOrientationLocked=false;a.setRequestedOrientation(a.previousRequestedOrientation);}
+                return;
+            }
+            if(a.extensionOrientationLocked)return;
+            a.previousRequestedOrientation=a.getRequestedOrientation();a.extensionOrientationLocked=true;
+            boolean portrait=direction==1;
+            boolean currentPortrait=a.getResources().getConfiguration().orientation==Configuration.ORIENTATION_PORTRAIT;
+            a.setRequestedOrientation(currentPortrait==portrait?ActivityInfo.SCREEN_ORIENTATION_LOCKED:
+                (portrait?ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
+        });
     }
     public static void requestCapture() {
         final FurinaActivity a = current;

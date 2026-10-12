@@ -2,7 +2,7 @@
 
 Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
 
-当前配套发布为 **v0.4.11**：电脑端 **Fukaros 0.4.10**、移动端 **Furina 0.4.11**。两端兼容并在同一发布页提供安装包。完整变化见 [更新记录](docs/CHANGELOG.md)，构建和实测范围见 [发布验证](docs/VALIDATION.md)。
+当前配套发布为 **v0.4.14**：电脑端 **Fukaros 0.4.14**、移动端 **Furina 0.4.14**，双端统一版本号，并在同一发布页提供安装包。完整变化见 [更新记录](docs/CHANGELOG.md)，构建和实测范围见 [发布验证](docs/VALIDATION.md)。
 
 配对码、平板导航和远程控制使用普通背景；其余必填连接项用深绿色，可选 / 调试连接项用深黄色，并用分割线分开。复制自动使用主屏幕，扩展自动使用平板虚拟屏。每行末尾的“…”使用透明背景、半高按钮及上方竖向弹簧，双端均点击查看步骤、再次点击关闭；移动端设置内容支持手指上下滑动。扩展位置弹窗采用较小的提示和步骤字体。
 
@@ -17,17 +17,20 @@ Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
 - 应用图标采用用户提供的原图：电脑端一根呆毛，移动端三根呆毛，分别用于窗口 / 托盘 / 快捷方式和 Android 启动器。
 - 电脑分享支持 **复制 / 扩展**。扩展通过 Windows 虚拟显示驱动创建独立桌面，窗口可拖到平板对应的屏幕。
 - 分辨率支持 **1920 / 1080 / 720 / 自动**，数字为最长边像素。默认自动，以 60 FPS 为目标，并过滤短时波动。
+- 移动端竖屏时，投屏画面置顶，下方为开始 / 停止、设置和放大按钮；“投屏模式 / 调试信息”复选项切换对应内容，横屏保留原布局。
+- 扩展方向以移动端接收时的横竖屏为准：竖屏桌面 1200×1920，横屏桌面 1920×1200，虚拟屏模式均为 60 Hz。扩展开始后锁定方向，点击停止或收到对端停止后恢复旋转。
+- 双端调试信息保留时间戳和中英双语；中文行的参数名称、帧率、耗时和单位使用中文。
 - 支持远程点击、滑动、长按及 Android 返回 / 主页 / 最近任务。
 - `.ui` 可在 Qt Creator Designer 编辑；协议、传输、编解码、会话确认、分辨率策略等核心代码放在各项目的 `core/`。
 
 ## 下载与安装
 
-在 [v0.4.11 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.11) 下载配套的两端安装包；两端应用版本号不同，不影响配对使用：
+在 [v0.4.14 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.14) 下载配套的两端安装包；两端版本号统一为 0.4.14，请配套更新：
 
-- [Fukaros-0.4.10-windows-x64-setup.exe](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.11/Fukaros-0.4.10-windows-x64-setup.exe)：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、独立 ADB 和扩展屏驱动文件。新电脑无需安装 Qt、Qt Creator 或联想模拟器，有快捷方式和卸载入口。
-- [Furina-0.4.11-android-arm64.apk](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.11/Furina-0.4.11-android-arm64.apk)：Android 9 及以上 ARM64 APK。保留 `com.furina.black` 的包标识，名称显示为 Furina，预览包沿用既有测试签名以支持覆盖安装。
+- [Fukaros-0.4.14-windows-x64-setup.exe](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.14/Fukaros-0.4.14-windows-x64-setup.exe)：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、独立 ADB 和扩展屏驱动文件。新电脑无需安装 Qt、Qt Creator 或联想模拟器，有快捷方式和卸载入口。
+- [Furina-0.4.14-android-arm64.apk](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.14/Furina-0.4.14-android-arm64.apk)：Android 9 及以上 ARM64 APK。保留 `com.furina.black` 的包标识，名称显示为 Furina，预览包沿用既有测试签名以支持覆盖安装。
 - `SHA256SUMS.txt`：安装包校验值。
-- `UPDATE-0.4.11.md`：本次更新说明和使用步骤。
+- `UPDATE-0.4.14.md`：本次更新说明和使用步骤。
 
 ## 使用
 
@@ -37,8 +40,9 @@ Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
 4. 在 Fukaros 选分享电脑屏幕或获取平板屏幕，按开始；调试区显示等待对端同意。对端点击同意后投屏，拒绝或 30 秒超时会取消请求。
 5. 分享平板屏幕还需要 Android 系统录屏授权；远程触控需要开启 Furina 无障碍服务和应用内允许控制选项。
 6. 电脑分享选择复制或扩展；首次扩展会请求管理员权限安装签名驱动。首次扩展在虚拟屏就绪后自动打开 Windows 显示设置；拖动屏幕并应用，返回点击“完成并记住位置”后投屏。以后连接选择“继承之前屏幕位置”或“重新配置屏幕位置”。投屏中布局变化会自动重建采集，停止后收起虚拟屏。
-7. 等待确认和投屏期间方向及复制 / 扩展不可切换。投屏中使用主界面分辨率按钮调整清晰度；需要更改方式或连接参数时先点击停止。对端点击停止也会结束会话并解锁。
-8. 移动端放大后使用系统屏幕边缘返回手势或返回键退出全屏，投屏继续播放；画面中央的普通左滑不会退出。全屏画面不显示额外退出按钮。
+7. 需要竖屏扩展时，先将 Furina 转为竖屏，再发起或同意扩展；扩展期间锁定横竖屏，需点击停止后再改变方向。
+8. 等待确认和投屏期间方向及复制 / 扩展不可切换。投屏中使用主界面分辨率按钮调整清晰度；需要更改方式或连接参数时先点击停止。对端点击停止也会结束会话并解锁。
+9. 移动端放大后使用系统屏幕边缘返回手势或返回键退出全屏，投屏继续播放；画面中央的普通左滑不会退出。全屏画面不显示额外退出按钮。
 
 Furina 的两个设置页分别展示 USB IP / 系统共享入口和 Wi-Fi 监听地址；USB 页启动时监听所有 IPv4 接口，Wi-Fi 页保留自定义监听地址。配对码在两种传输间共用。USB IP 可在开启网络共享后刷新；USB 设备码仅用于标识，ADB 兼容模式使用电脑下方的 ADB 序列号。
 

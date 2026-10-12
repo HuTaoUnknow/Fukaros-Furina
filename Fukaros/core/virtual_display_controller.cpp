@@ -24,9 +24,9 @@ bool VirtualDisplayController::setPosition(const QPoint &position){
 void VirtualDisplayController::fail(const QString &cn,const QString &en){
  release();emit failed(cn,en);
 }
-void VirtualDisplayController::ensure(){
+void VirtualDisplayController::ensure(bool portrait){
  if(m_preparing)return;
- m_preparing=true;m_elapsed.restart();
+ m_preparing=true;m_portrait=portrait;m_elapsed.restart();
  if(available()){acquire();return;}
 #ifdef Q_OS_WIN
  if(fr_virtual_device_present()){
@@ -49,9 +49,9 @@ void VirtualDisplayController::ensure(){
 #endif
 }
 void VirtualDisplayController::acquire(){
- const long result=fr_virtual_acquire(&m_display);
+ const long result=fr_virtual_acquire_oriented(&m_display,m_portrait);
  if(result){fail("创建扩展桌面失败，错误："+QString::number(result),"Creating the extended desktop failed. Error: "+QString::number(result));return;}
- emit status("正在启用平板扩展桌面：1920×1200 / 60 Hz。","Enabling the tablet desktop: 1920x1200 / 60 Hz.");
+ emit status(m_portrait?"正在启用竖屏扩展桌面：1200×1920，刷新率 60 赫兹。":"正在启用横屏扩展桌面：1920×1200，刷新率 60 赫兹。",m_portrait?"Enabling portrait extension: 1200x1920 / 60 Hz.":"Enabling landscape extension: 1920x1200 / 60 Hz.");
  m_elapsed.restart();m_poll.start();poll();
 }
 void VirtualDisplayController::poll(){
@@ -71,7 +71,8 @@ void VirtualDisplayController::poll(){
 #ifdef Q_OS_WIN
   match=match||(!QString::fromUtf8(m_display.monitor_name).isEmpty()&&screen->name()==QString::fromUtf8(m_display.monitor_name));
 #endif
-  if(match&&screen!=QGuiApplication::primaryScreen()&&screen->geometry().width()>0){m_qtName=screen->name();m_preparing=false;m_poll.stop();emit ready(screen->name());return;}
+  const auto geometry=screen->geometry();const bool correctOrientation=(geometry.height()>geometry.width())==m_portrait;
+  if(match&&correctOrientation&&screen!=QGuiApplication::primaryScreen()&&geometry.width()>0){m_qtName=screen->name();m_preparing=false;m_poll.stop();emit ready(screen->name());return;}
  }
  if(m_elapsed.elapsed()>10000)fail("Windows 未能启用虚拟扩展桌面。","Windows did not activate the virtual desktop.");
 }

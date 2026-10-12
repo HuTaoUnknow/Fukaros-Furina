@@ -20,10 +20,15 @@ int main(void){
    if(EnumDisplaySettingsW(device.DeviceName,ENUM_CURRENT_SETTINGS,&screens[count].mode))count++;
   }
  }
- const POINT positions[]={{-1920,0},{0,-1200}};
- for(unsigned cycle=0;cycle<2;cycle++){
-  fr_virtual_display display={0};long result=fr_virtual_acquire(&display);
+ const POINT positions[]={{-1920,0},{-1200,0},{0,-1920},{0,-1200}};
+ for(unsigned cycle=0;cycle<4;cycle++){
+  int portrait=cycle==1||cycle==2;
+  fr_virtual_display display={0};long result=fr_virtual_acquire_oriented(&display,portrait);
   if(result){printf("acquire error=%ld\n",result);return 1;}
+  char name[128]={0};DEVMODEA mode={0};mode.dmSize=sizeof(mode);
+  int matching=fr_virtual_name(&display,name,sizeof(name))&&EnumDisplaySettingsA(name,ENUM_CURRENT_SETTINGS,&mode)&&
+   mode.dmPelsWidth==(portrait?1200u:1920u)&&mode.dmPelsHeight==(portrait?1920u:1200u)&&mode.dmDisplayFrequency==60;
+  printf("portrait=%d desktop=%lux%lu refresh=%lu matching=%d\n",portrait,mode.dmPelsWidth,mode.dmPelsHeight,mode.dmDisplayFrequency,matching);if(!matching)valid=0;
   result=fr_virtual_set_position(&display,positions[cycle].x,positions[cycle].y);
   if(result||fr_virtual_get_position(&display,&x,&y)||x!=positions[cycle].x||y!=positions[cycle].y||!preserved(screens,count))valid=0;
   printf("cycle=%u set=%ld position=%ld,%ld physical_preserved=%d\n",cycle,result,x,y,preserved(screens,count));fflush(stdout);

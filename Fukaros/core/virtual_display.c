@@ -61,7 +61,8 @@ long fr_virtual_detach_idle(void){
  result=SetDisplayConfig(n,active,mode_count,modes,SDC_APPLY|SDC_USE_SUPPLIED_DISPLAY_CONFIG|SDC_ALLOW_CHANGES|SDC_SAVE_TO_DATABASE);
  done:free(active);free(paths);free(modes);return result;
 }
-long fr_virtual_acquire(fr_virtual_display *d){
+long fr_virtual_acquire(fr_virtual_display *d){return fr_virtual_acquire_oriented(d,0);}
+long fr_virtual_acquire_oriented(fr_virtual_display *d,int portrait){
  DISPLAY_DEVICEW v;DISPLAYCONFIG_PATH_INFO *paths=NULL,*active=NULL;DISPLAYCONFIG_MODE_INFO *modes=NULL;UINT32 count=0,mode_count=0,n=0,i,index=UINT_MAX;LONG result,right=0,top=0;int positioned=0;
  if(!d)return ERROR_INVALID_PARAMETER;if(d->acquired)return 0;if(!find_virtual(&v))return ERROR_NOT_FOUND;
  memset(d,0,sizeof(*d));wcscpy(d->name,v.DeviceName);
@@ -88,9 +89,9 @@ long fr_virtual_acquire(fr_virtual_display *d){
  /* Clone installation can have the physical adapter's source. Give the IDD
   * its own source instead of trying to enable the dormant GDI adapter. */
  active[n].sourceInfo.adapterId=active[n].targetInfo.adapterId;active[n].sourceInfo.id=0;active[n].sourceInfo.modeInfoIdx=mode_count;
- active[n].targetInfo.modeInfoIdx=DISPLAYCONFIG_PATH_MODE_IDX_INVALID;active[n].targetInfo.refreshRate.Numerator=60;active[n].targetInfo.refreshRate.Denominator=1;active[n].targetInfo.rotation=DISPLAYCONFIG_ROTATION_IDENTITY;active[n].targetInfo.scaling=DISPLAYCONFIG_SCALING_IDENTITY;
+ active[n].targetInfo.modeInfoIdx=DISPLAYCONFIG_PATH_MODE_IDX_INVALID;active[n].targetInfo.refreshRate.Numerator=60;active[n].targetInfo.refreshRate.Denominator=1;active[n].targetInfo.rotation=portrait?DISPLAYCONFIG_ROTATION_ROTATE90:DISPLAYCONFIG_ROTATION_IDENTITY;active[n].targetInfo.scaling=DISPLAYCONFIG_SCALING_IDENTITY;
  memset(&modes[mode_count],0,sizeof(*modes));modes[mode_count].infoType=DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE;modes[mode_count].adapterId=active[n].sourceInfo.adapterId;modes[mode_count].id=0;
- modes[mode_count].sourceMode.width=1920;modes[mode_count].sourceMode.height=1200;modes[mode_count].sourceMode.pixelFormat=DISPLAYCONFIG_PIXELFORMAT_32BPP;modes[mode_count].sourceMode.position.x=right;modes[mode_count].sourceMode.position.y=top;
+ modes[mode_count].sourceMode.width=portrait?1200:1920;modes[mode_count].sourceMode.height=portrait?1920:1200;modes[mode_count].sourceMode.pixelFormat=DISPLAYCONFIG_PIXELFORMAT_32BPP;modes[mode_count].sourceMode.position.x=right;modes[mode_count].sourceMode.position.y=top;
  /* Inactive paths have no scan timing. Supplying only width/height is
   * rejected with ERROR_INVALID_PARAMETER, even with SDC_ALLOW_CHANGES. */
  {
@@ -151,7 +152,8 @@ long fr_virtual_set_position(fr_virtual_display *d,long x,long y){
 int fr_virtual_available(void){return 0;}
 int fr_virtual_device_present(void){return 0;}
 int fr_virtual_name(const fr_virtual_display *d,char *n,unsigned s){(void)d;(void)n;(void)s;return 0;}
-long fr_virtual_acquire(fr_virtual_display *d){(void)d;return 50;}
+long fr_virtual_acquire(fr_virtual_display *d){return fr_virtual_acquire_oriented(d,0);}
+long fr_virtual_acquire_oriented(fr_virtual_display *d,int portrait){(void)d;return 50;}
 long fr_virtual_release(fr_virtual_display *d){(void)d;return 0;}
 long fr_virtual_detach_idle(void){return 0;}
 long fr_virtual_get_position(const fr_virtual_display *d,long *x,long *y){(void)d;(void)x;(void)y;return 50;}

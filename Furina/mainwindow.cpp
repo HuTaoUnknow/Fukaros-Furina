@@ -14,14 +14,18 @@
 MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindow),cfg(new Ui::SettingsDialog),m_settings(new QDialog(this)),m_peer(this),m_discovery(this),m_android(this){
  ui->setupUi(this);cfg->setupUi(m_settings);furinaConfigureSettingsScroll(cfg->settingsScroll);cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");setStyleSheet(furinaStyle());furinaConfigureToolIcons(ui->settings,ui->maximize);setWindowIcon(QIcon(":/icons/app.png"));setWindowTitle("Furina · 平板端");resize(1100,680);
  m_view=new ScreenView(this);ui->viewLayout->addWidget(m_view);m_presentation=new Presentation(this,ui->sidebar,ui->bottomPanel,m_view);m_resolution=new ResolutionChoice(this);
-m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_castUi=new CastUiState(this);m_castControl=new CastControl(this,m_castUi,&m_peer);
+m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_consent->setReceiverOrientation([this]{return width()<height();});m_castUi=new CastUiState(this);m_castControl=new CastControl(this,m_castUi,&m_peer);m_layout=new MobileLayout(this);
  connect(m_consent,&SessionConsent::status,this,[this](const QString &cn,const QString &en){log(cn,en);});
  connect(m_consent,&SessionConsent::incoming,this,[this]{m_castUi->lockPending();m_pending=false;m_presentation->setActive(false);});
  connect(m_consent,&SessionConsent::ended,this,&MainWindow::endSession);
  connect(m_consent,&SessionConsent::approved,this,[this](bool sharing,bool extended,bool initiatedHere){
   m_castUi->occupy(sharing,extended);log("投屏方式已锁定，仅清晰度可调整；点击停止后可修改方式。","Casting options are locked; resolution can still change. Press Stop to change the casting mode.");m_pending=false;m_direction->setSharing(sharing);{const QSignalBlocker a(ui->duplicate),b(ui->extend);(extended?ui->extend:ui->duplicate)->setChecked(true);}
   ui->modePanel->setVisible(!sharing);m_sessionActive=true;
-  updateVideoGeometry();
+  if(!sharing&&extended){
+   m_android.setExtensionOrientation(m_consent->portrait()?1:0);
+   log(m_consent->portrait()?"竖屏扩展已锁定；点击停止后恢复旋转。":"横屏扩展已锁定；点击停止后恢复旋转。",m_consent->portrait()?"Portrait extension locked. Press Stop to restore rotation.":"Landscape extension locked. Press Stop to restore rotation.");
+  }
+  m_layout->refresh(m_presentation->active());updateVideoGeometry();
   if(initiatedHere)applyDirection();
  });
  fr_video_policy_init(&m_videoPolicy,0);
@@ -39,8 +43,8 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  connect(&m_android,&AndroidBridge::needKey,this,[this]{m_peer.sendSession(FR_REQUEST_KEY);});
  connect(&m_android,&AndroidBridge::exitFullscreen,this,[this]{m_presentation->setActive(false);updateVideoGeometry();});
  connect(&m_android,&AndroidBridge::videoStats,this,[this](bool sender,double fps,double ms,unsigned queue,double shown,int w,int h,unsigned sampleMs){
-  if(sender)log(QString("平板编码：%1 FPS，GPU 处理 %2 ms，%3×%4，目标 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h),QString("Tablet encode: %1 FPS, GPU processing %2 ms, %3x%4, target 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h));
-  else log(QString("平板解码：%1 FPS，显示 %2 FPS，%3×%4，目标 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h),QString("Tablet decode: %1 FPS, display %2 FPS, %3x%4, target 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h));
+  if(sender)log(QString("平板编码：帧率 %1 帧/秒，图形处理耗时 %2 毫秒，分辨率 %3×%4 像素，目标帧率 60 帧/秒").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h),QString("Tablet encode: %1 FPS, GPU processing %2 ms, %3x%4, target 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(w).arg(h));
+  else log(QString("平板解码：解码帧率 %1 帧/秒，显示帧率 %2 帧/秒，分辨率 %3×%4 像素，目标帧率 60 帧/秒").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h),QString("Tablet decode: %1 FPS, display %2 FPS, %3x%4, target 60").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(w).arg(h));
   if(sender){m_encodeWorkMs=ms;if(fr_video_policy_sample_elapsed(&m_videoPolicy,qMin(fps,m_remoteFps),qMax(ms+(ui->receive->isChecked()?m_decodeWorkMs:0),m_remoteWorkMs),qMax(m_peer.videoQueueMs(),m_remoteQueue),sampleMs)){m_android.setCaptureResolution(m_videoPolicy.edge);log(QString("自动清晰度：最长边 %1").arg(m_videoPolicy.edge),QString("Auto resolution: max edge %1").arg(m_videoPolicy.edge));}}else {m_decodeWorkMs=ms;m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);}
  });
  connect(&m_videoReceiver,&DesktopVideoReceiver::frameReady,this,[this]{QImage image;if(m_videoReceiver.takeImage(&image)&&m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked())m_view->setImage(image);});
@@ -49,7 +53,7 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
 #ifdef Q_OS_ANDROID
  // Render settings on the existing activity surface rather than a secondary native window.
  m_settings->setParent(ui->contentPanel,Qt::Widget);m_settings->hide();
- connect(m_settings,&QDialog::finished,this,[this]{ui->sidebar->setEnabled(true);updateVideoGeometry();ui->viewPanel->setEnabled(true);ui->bottomPanel->setEnabled(true);});
+ connect(m_settings,&QDialog::finished,this,[this]{ui->sidebar->setEnabled(true);ui->portraitToolbar->setEnabled(true);ui->portraitTabs->setEnabled(true);updateVideoGeometry();ui->viewPanel->setEnabled(true);ui->bottomPanel->setEnabled(true);});
 #endif
  connect(qApp,&QGuiApplication::applicationStateChanged,this,[this](Qt::ApplicationState state){setUpdatesEnabled(state!=Qt::ApplicationSuspended);});
  QSettings s;if(s.value("token").toString().size()<6)s.setValue("token",QString::number(QRandomGenerator::system()->bounded(100000000,999999999)));
@@ -57,7 +61,7 @@ m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this)
  auto *modeGroup=new QButtonGroup(this);modeGroup->addButton(ui->duplicate);modeGroup->addButton(ui->extend);modeGroup->setExclusive(true);if(s.value("castMode",0).toInt()==1)ui->extend->setChecked(true);
  connect(m_castControl,&CastControl::startRequested,this,&MainWindow::start);connect(m_castControl,&CastControl::stopRequested,this,&MainWindow::stop);
  connect(ui->settings,&QPushButton::clicked,this,&MainWindow::openSettings);connect(ui->maximize,&QPushButton::clicked,this,&MainWindow::maximize);
- connect(m_presentation,&Presentation::changed,this,[this](bool on){furinaSetMaximizeIcon(ui->maximize,on||m_remoteMax);updateVideoGeometry();});
+ connect(m_presentation,&Presentation::changed,this,[this](bool on){furinaSetMaximizeIcon(ui->maximize,on||m_remoteMax);m_layout->refresh(on);updateVideoGeometry();});
  connect(m_direction,&DirectionChoice::changed,this,&MainWindow::directionChanged);
  auto modeChanged=[this](bool checked){if(m_castUi->locked()){m_castUi->preserveSelection();return;}if(checked&&(m_sessionActive||m_consent->pending()))stop();};connect(ui->duplicate,&QCheckBox::toggled,this,modeChanged);connect(ui->extend,&QCheckBox::toggled,this,modeChanged);
  connect(m_settings,&QDialog::accepted,this,[this]{if(m_castUi->locked()){loadSettings();log("投屏方式已锁定，请点击停止后修改设置。","Casting options are locked. Press Stop to change settings.");return;}stop();saveSettings();log("设置已保存，请按开始重新启动服务。","Settings saved. Press Start to restart the service.");});
@@ -106,7 +110,7 @@ void MainWindow::refreshAddresses(){
 void MainWindow::openSettings(){
  refreshAddresses();
 #ifdef Q_OS_ANDROID
- const auto size=ui->contentPanel->size();m_settings->resize(qMin(560,size.width()-24),qMin(620,size.height()-24));m_settings->move((size.width()-m_settings->width())/2,(size.height()-m_settings->height())/2);ui->sidebar->setEnabled(false);ui->viewPanel->setEnabled(false);ui->bottomPanel->setEnabled(false);m_settings->show();m_settings->raise();updateVideoGeometry();
+ const auto size=ui->contentPanel->size();m_settings->resize(qMin(560,size.width()-24),qMin(620,size.height()-24));m_settings->move((size.width()-m_settings->width())/2,(size.height()-m_settings->height())/2);ui->sidebar->setEnabled(false);ui->portraitToolbar->setEnabled(false);ui->portraitTabs->setEnabled(false);ui->viewPanel->setEnabled(false);ui->bottomPanel->setEnabled(false);m_settings->show();m_settings->raise();updateVideoGeometry();
 #else
  const auto size=screen()->availableGeometry().size();m_settings->resize(qMin(560,size.width()-24),qMin(620,size.height()-24));m_settings->open();
 #endif
@@ -124,7 +128,7 @@ void MainWindow::start(){
  }
  m_pending=true;m_castUi->lockPending();log("开始等待对端同意。","Starting: waiting for the other device to approve.");log("服务已启动，等待电脑连接。","Service started. Waiting for the PC connection.");
 }
-void MainWindow::stop(){m_discovery.stop();m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close(true);m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);}
+void MainWindow::stop(){m_android.setExtensionOrientation(-1);m_discovery.stop();m_castUi->reset();m_consent->cancel();m_pending=false;m_sessionActive=false;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopCapture();m_peer.close(true);m_listening=false;m_remoteMax=false;m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_presentation->setActive(false);m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);}
 void MainWindow::startCapture(){if(!m_peer.ready()||m_sharing||!m_consent->active()||!m_consent->sharing())return;m_sharing=true;m_remoteFps=60;m_remoteQueue=0;m_remoteWorkMs=0;m_encodeWorkMs=0;fr_video_policy_init(&m_videoPolicy,m_resolution->value());m_android.setCaptureResolution(m_videoPolicy.edge);m_android.startCapture();log("正在请求平板录屏授权。","Requesting tablet screen capture permission.");}
 void MainWindow::stopCapture(){m_sharing=false;m_android.wantFrame=false;m_android.stopCapture();}
 void MainWindow::directionChanged(){
@@ -133,7 +137,7 @@ void MainWindow::directionChanged(){
  m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_view->setImage({});m_presentation->setActive(false);if(m_remoteMax){m_peer.sendSession(FR_RESTORE);m_remoteMax=false;furinaSetMaximizeIcon(ui->maximize,false);}
  if(m_sessionActive||m_pending||m_consent->pending())stop();m_sessionActive=false;
 }
-void MainWindow::endSession(){m_castUi->reset();stopCapture();m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_view->setImage({});m_presentation->setActive(false);m_pending=false;m_sessionActive=false;m_remoteMax=false;furinaSetMaximizeIcon(ui->maximize,false);}
+void MainWindow::endSession(){m_android.setExtensionOrientation(-1);m_castUi->reset();stopCapture();m_videoVisible=false;m_android.resetVideo();m_videoReceiver.reset();m_view->setImage({});m_presentation->setActive(false);m_pending=false;m_sessionActive=false;m_remoteMax=false;furinaSetMaximizeIcon(ui->maximize,false);}
 void MainWindow::requestDirection(){
  if(m_castUi->occupied())return;
  if(m_consent->request(m_direction->sharing(),ui->extend->isChecked())){m_pending=false;m_castUi->lockPending();}
@@ -156,7 +160,7 @@ void MainWindow::session(quint32 action){
  else if(action==FR_MAXIMIZE||action==FR_RESTORE){if((m_consent->active()&&!m_consent->sharing())||action==FR_RESTORE)m_presentation->setActive(action==FR_MAXIMIZE);}
 }
 void MainWindow::maximize(){if(ui->share->isChecked()){if(!m_peer.ready()){log("请先连接电脑，再放大接收端画面。","Connect the PC before maximizing its received content.");return;}m_remoteMax=!m_remoteMax;m_peer.sendSession(m_remoteMax?FR_MAXIMIZE:FR_RESTORE);furinaSetMaximizeIcon(ui->maximize,m_remoteMax);log(m_remoteMax?"已请求电脑全屏显示。":"已请求电脑退出全屏。",m_remoteMax?"Requested full-screen viewing on the PC.":"Requested leaving full-screen viewing on the PC.");}else m_presentation->setActive(!m_presentation->active());}
-void MainWindow::resizeEvent(QResizeEvent *event){QMainWindow::resizeEvent(event);if(!ui->bottomPanel)return;const bool landscape=width()>=height();ui->bottomLayout->setDirection(landscape?QBoxLayout::LeftToRight:QBoxLayout::TopToBottom);ui->bottomPanel->setMinimumHeight(landscape?220:320);ui->bottomPanel->setMaximumHeight(landscape?220:320);}
+void MainWindow::resizeEvent(QResizeEvent *event){QMainWindow::resizeEvent(event);if(m_layout)m_layout->refresh(m_presentation->active());}
 
 void MainWindow::updateVideoGeometry(){
 #ifdef Q_OS_ANDROID

@@ -19,7 +19,8 @@ extern "C" {
 #endif
 int fr_virtual_available(void);
 int fr_virtual_device_present(void);
-/* Uses a 1920x1200 / 60 Hz desktop. Video resolution remains independent. */
+/* Uses a 1920x1200 landscape or 1200x1920 portrait / 60 Hz desktop. */
+long fr_virtual_acquire_oriented(fr_virtual_display *display, int portrait);
 long fr_virtual_acquire(fr_virtual_display *display);
 long fr_virtual_release(fr_virtual_display *display);
 long fr_virtual_detach_idle(void);

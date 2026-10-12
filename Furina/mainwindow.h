@@ -9,6 +9,7 @@
 #include "session_consent.h"
 #include "cast_ui_state.h"
 #include "cast_control.h"
+#include "mobile_layout.h"
 #include "androidbridge.h"
 #include "desktop_video.h"
 #include "video_policy.h"
@@ -28,5 +29,6 @@ private:
  bool m_sharing=false,m_listening=false,m_pending=false,m_sessionActive=false,m_remoteMax=false;
  void log(const QString &message,const QString &english={});void loadSettings();void saveSettings();void openSettings();void refreshAddresses();
  void start();void stop();void startCapture();void stopCapture();void applyDirection();void directionChanged();void requestDirection();void endSession();void session(quint32 action);void maximize();
+ MobileLayout *m_layout=nullptr;
  void updateVideoGeometry();
 };

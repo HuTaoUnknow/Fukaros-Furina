@@ -43,12 +43,12 @@ MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindo
  connect(&m_videoSender,&DesktopVideoSender::status,this,[this](const QString &text){log(text);});
  connect(&m_videoSender,&DesktopVideoSender::failed,this,[this]{if(!m_sharing)return;stopSharing();m_sessionActive=ui->receive->isChecked();m_peer.sendSession(FR_STOP_RECEIVE);log("屏幕采集未能恢复，请点击停止，检查显示器后重新开始。","Screen capture could not recover. Press Stop, check the monitor, then start again.");});
  m_layoutRefresh.setSingleShot(true);m_layoutRefresh.setInterval(250);connect(&m_layoutRefresh,&QTimer::timeout,this,&MainWindow::rebindCapture);
- connect(&m_videoSender,&DesktopVideoSender::stats,this,[this](double fps,double ms,int edge){m_encodeWorkMs=ms;log(QString("电脑发送：%1 FPS，编码 %2 ms，最长边 %3，目标 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(edge),QString("PC send: %1 FPS, encode %2 ms, edge %3, target 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(edge));});
+ connect(&m_videoSender,&DesktopVideoSender::stats,this,[this](double fps,double ms,int edge){m_encodeWorkMs=ms;log(QString("电脑发送：帧率 %1 帧/秒，编码耗时 %2 毫秒，最长边 %3 像素，目标帧率 60 帧/秒").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(edge),QString("PC send: %1 FPS, encode %2 ms, edge %3, target 60").arg(fps,0,'f',1).arg(ms,0,'f',1).arg(edge));});
  connect(&m_peer,&Peer::video,this,[this](const QByteArray &packet){if(m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked())m_videoReceiver.submit(packet);});
  connect(&m_videoReceiver,&DesktopVideoReceiver::frameReady,this,[this]{QImage image;if(m_videoReceiver.takeImage(&image)&&m_consent->active()&&!m_consent->sharing()&&ui->receive->isChecked()){if(!m_view->hasImage()){m_displaySample.restart();m_view->takeDisplayedFrames();}m_view->setImage(image);}});
  connect(&m_videoReceiver,&DesktopVideoReceiver::recover,this,[this]{m_peer.sendSession(FR_REQUEST_KEY);});
  connect(&m_videoReceiver,&DesktopVideoReceiver::status,this,[this](const QString &text){log(text);});
- connect(&m_videoReceiver,&DesktopVideoReceiver::stats,this,[this](double fps,double ms,unsigned queue){const auto displayed=m_view->takeDisplayedFrames();const auto elapsed=qMax<qint64>(1,m_displaySample.restart());const double shown=m_view->isVisible()&&!isMinimized()?displayed*1000.0/elapsed:fps;m_videoSender.setReceiverWork(m_sharing?ms:0);m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);log(QString("电脑接收：解码 %1 FPS，显示 %2 FPS，处理 %3 ms").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(ms,0,'f',1),QString("PC receive: decode %1 FPS, display %2 FPS, processing %3 ms").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(ms,0,'f',1));});
+ connect(&m_videoReceiver,&DesktopVideoReceiver::stats,this,[this](double fps,double ms,unsigned queue){const auto displayed=m_view->takeDisplayedFrames();const auto elapsed=qMax<qint64>(1,m_displaySample.restart());const double shown=m_view->isVisible()&&!isMinimized()?displayed*1000.0/elapsed:fps;m_videoSender.setReceiverWork(m_sharing?ms:0);m_peer.sendFeedback(fps,ms+(m_sharing?m_encodeWorkMs:0),queue,shown);log(QString("电脑接收：解码帧率 %1 帧/秒，显示帧率 %2 帧/秒，处理耗时 %3 毫秒").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(ms,0,'f',1),QString("PC receive: decode %1 FPS, display %2 FPS, processing %3 ms").arg(fps,0,'f',1).arg(shown,0,'f',1).arg(ms,0,'f',1));});
  connect(&m_virtual,&VirtualDisplayController::status,this,[this](const QString &cn,const QString &en){log(cn,en);});
  connect(&m_virtual,&VirtualDisplayController::failed,this,[this](const QString &cn,const QString &en){log(cn,en);m_sessionActive=ui->receive->isChecked();m_peer.sendSession(FR_STOP_RECEIVE);refreshScreens();});
  connect(&m_virtual,&VirtualDisplayController::ready,this,[this](const QString &){
@@ -202,7 +202,7 @@ bool MainWindow::startSharing(){
  if(castMode()==FR_CAST_EXTEND&&QGuiApplication::platformName()!="offscreen"){
   // Prefer a dedicated tablet desktop, including when physical monitors exist.
   if(m_virtual.screenName().isEmpty()){
-   m_virtual.ensure();return m_virtual.preparing()||m_sharing;
+   m_virtual.ensure(m_consent->portrait());return m_virtual.preparing()||m_sharing;
   }
   if(m_virtual.preparing())return true;
   if(!m_position->configured()){m_position->begin();return true;}

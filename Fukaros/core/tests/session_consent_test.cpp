@@ -13,6 +13,24 @@ private slots:
   uint8_t header[12];fr_header decoded{};QVERIFY(fr_encode_header(header,FR_APPROVAL,12));QVERIFY(fr_decode_header(header,&decoded));QCOMPARE(decoded.type,uint8_t(FR_APPROVAL));
   for(quint32 verb=FR_APPROVAL_REQUEST;verb<=FR_APPROVAL_CANCEL;++verb){QVERIFY(fr_valid_approval(1,verb,FR_APPROVAL_SHARE));QVERIFY(fr_valid_approval(1,verb,FR_APPROVAL_RECEIVE|FR_APPROVAL_EXTEND));}
   QVERIFY(!fr_valid_approval(0,FR_APPROVAL_REQUEST,1));QVERIFY(!fr_valid_approval(1,0,1));QVERIFY(!fr_valid_approval(1,5,1));QVERIFY(!fr_valid_approval(1,1,0));QVERIFY(!fr_valid_approval(1,1,3));QVERIFY(!fr_valid_approval(1,1,9));
+  QVERIFY(fr_valid_approval(1,FR_APPROVAL_REQUEST,FR_APPROVAL_RECEIVE|FR_APPROVAL_EXTEND|FR_APPROVAL_PORTRAIT));
+ }
+ void receiverChoosesOrientation(){
+  Peer server,client;ConsentWindow receiver,sender;SessionConsent remote(&server,&receiver),local(&client,&sender);
+  bool portrait=true;remote.setReceiverOrientation([&]{return portrait;});
+  QVERIFY(server.listen(29883,"orientation-code"));client.connectTo("127.0.0.1",29883,"orientation-code");QTRY_VERIFY(server.ready()&&client.ready());
+  QSignalSpy requests(&server,&Peer::approval);QVERIFY(local.request(true,true));QTRY_VERIFY(remote.pending());
+  const auto id=requests.last()[0].toUInt();
+  // A reply cannot use orientation negotiation to alter the authorized direction.
+  server.sendApproval(id,FR_APPROVAL_ACCEPT,FR_APPROVAL_RECEIVE|FR_APPROVAL_EXTEND|FR_APPROVAL_PORTRAIT);
+  QTest::qWait(20);QVERIFY(local.pending()&&!local.active());
+  receiver.allow();QTRY_VERIFY(local.active());QVERIFY(local.portrait()&&remote.portrait());
+  portrait=false;QVERIFY(remote.portrait());local.cancel();QTRY_VERIFY(!remote.active());
+  QVERIFY(local.request(true,true));QTRY_VERIFY(remote.pending());receiver.allow();QTRY_VERIFY(local.active());QVERIFY(!local.portrait()&&!remote.portrait());
+  local.cancel();QTRY_VERIFY(!remote.active());
+  local.setReceiverOrientation([]{return true;});QVERIFY(local.request(false,true));QTRY_VERIFY(remote.pending());receiver.allow();QTRY_VERIFY(local.active());QVERIFY(local.portrait()&&remote.portrait());
+  local.cancel();QTRY_VERIFY(!remote.active());
+  QVERIFY(local.request(false,false));QTRY_VERIFY(remote.pending());receiver.allow();QTRY_VERIFY(local.active());QVERIFY(!local.portrait()&&!remote.portrait());
  }
  void approveRejectCancelAndLateReplies(){
   Peer server,client;ConsentWindow receiver,sender;SessionConsent remote(&server,&receiver),local(&client,&sender);

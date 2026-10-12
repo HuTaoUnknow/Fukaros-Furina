@@ -1,4 +1,5 @@
 #include "interface_support.h"
+#include "debug_text.h"
 #include <QDateTime>
 #include <QEvent>
 #include <QRegularExpression>
@@ -219,6 +220,10 @@ QString furinaLog(const QString &message,const QString &english){
   {"接收端处理过慢","Peer too slow"},{"投屏请求无效","Invalid session request"},{"监听 IP 地址无效","Invalid listening IP address"},
   {"ADB 操作超时","ADB timed out"},{"请先填写 USB 设备码","Select a device serial first"},
   {"ADB 队列已满","ADB queue is full"},{"ADB 命令失败","ADB command failed"},
+  {"远端已关闭连接","The remote host closed the connection"},{"网络操作超时","Network operation timed out"},
+  {"套接字操作超时","Socket operation timed out"},{"网络不可达","Network unreachable"},
+  {"此操作的代理类型无效，请检查系统代理","The proxy type is invalid for this operation"},
+  {"地址已被占用","The bound address is already in use"},{"没有可用的硬件编码器","No hardware encoder"},
   {"连接被拒绝，请检查对端服务是否启动","Connection refused"},{"找不到设备地址","Host not found"},
   {"录屏授权已取消","Screen capture permission was cancelled"},
   {"平板录屏已启动","Tablet screen capture started"},
@@ -243,7 +248,7 @@ QString furinaLog(const QString &message,const QString &english){
  }
  en.replace("，目标 60 FPS",", target 60 FPS");
  if(en.isEmpty()){en="Device/system report: "+cn;cn="设备 / 系统原始信息："+cn;}
- cn.replace('\n'," | ");en.replace('\n'," | ");
+ cn=furinaChineseDebugParameters(cn);cn.replace('\n'," | ");en.replace('\n'," | ");
  const auto stamp=QDateTime::currentDateTime().toString("[HH:mm:ss] ");
  return stamp+"中 · "+cn+'\n'+stamp+"EN · "+en;
 }
