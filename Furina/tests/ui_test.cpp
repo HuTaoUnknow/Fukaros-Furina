@@ -23,6 +23,20 @@ class UiTest:public QObject{
 private slots:
  void initTestCase(){QCoreApplication::setOrganizationName("FurinaTests");QCoreApplication::setApplicationName("FurinaUi60");}
 
+ void backAndResumePreserveApprovedSession(){
+  MainWindow w;w.resize(390,780);w.show();auto *bridge=w.findChild<AndroidBridge*>();auto *peer=w.findChild<Peer*>();auto *consent=w.findChild<SessionConsent*>();
+  Peer other;QSignalSpy controls(&other,&Peer::session),status(bridge,&AndroidBridge::status);
+  QVERIFY(other.listen(29909,"resume-session-code","127.0.0.1"));peer->connectTo("127.0.0.1",29909,"resume-session-code");QTRY_VERIFY(peer->ready()&&other.ready());
+  other.sendApproval(4701,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE|FR_APPROVAL_EXTEND);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(consent->active());
+  QCOMPARE(bridge->property("sessionKept").toBool(),true);
+  w.findChild<QPushButton*>("settings")->click();auto *settings=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(settings->isVisible());bridge->backRequested();QTRY_VERIFY(!settings->isVisible());
+  w.findChild<QPushButton*>("maximize")->click();QTRY_VERIFY(w.isFullScreen());QTRY_VERIFY(actionSeen(controls,FR_FULLSCREEN_CONFIRMED));bridge->backRequested();QTRY_VERIFY(!w.isFullScreen());QTRY_VERIFY(actionSeen(controls,FR_RESTORED_CONFIRMED));QVERIFY(consent->active()&&peer->ready());
+  bridge->backRequested();QTRY_VERIFY(!status.isEmpty());QVERIFY(status.last()[0].toString().contains("连接保留"));
+  qApp->applicationStateChanged(Qt::ApplicationSuspended);QVERIFY(consent->active()&&peer->ready());QVERIFY(!w.updatesEnabled());
+  qApp->applicationStateChanged(Qt::ApplicationActive);QTRY_VERIFY(actionSeen(controls,FR_REQUEST_KEY));QVERIFY(w.updatesEnabled());QVERIFY(consent->active()&&peer->ready());
+  bridge->stopRequested();QTRY_VERIFY(!other.ready());QCOMPARE(bridge->property("sessionKept").toBool(),false);
+ }
+
  void portraitLayoutAndConsent(){
   MainWindow w;w.resize(390,780);w.show();
   auto *toolbar=w.findChild<QWidget*>("portraitToolbar"),*tabs=w.findChild<QWidget*>("portraitTabs");

@@ -91,6 +91,19 @@ void AndroidBridge::resetVideo(){
  QJniObject::callStaticMethod<void>("com/furina/black/VideoCore","reset","()V");
 #endif
 }
+void AndroidBridge::keepSession(bool active){
+ setProperty("sessionKept",active);
+#ifdef Q_OS_ANDROID
+ QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","keepSession","(Z)V",jboolean(active));
+#endif
+}
+void AndroidBridge::backgroundTask(){
+#ifdef Q_OS_ANDROID
+ QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity","backgroundTask","()V");
+#else
+ emit status("返回桌面，投屏连接保留。\nEN: Returning Home; the casting connection stays active.");
+#endif
+}
 void AndroidBridge::updateVideoView(const QRect &r,bool visible,bool fullscreen){
 #ifdef Q_OS_ANDROID
  QJniObject::callStaticMethod<void>("com/furina/black/VideoCore","show","(IIIIZZ)V",jint(r.x()),jint(r.y()),jint(r.width()),jint(r.height()),jboolean(visible),jboolean(fullscreen));
@@ -99,6 +112,12 @@ void AndroidBridge::updateVideoView(const QRect &r,bool visible,bool fullscreen)
 #endif
 }
 #ifdef Q_OS_ANDROID
+extern "C" JNIEXPORT jboolean JNICALL Java_com_furina_black_FurinaActivity_nativeBackRequested(JNIEnv*,jclass){
+ QMutexLocker lock(&bridgeMutex);if(!bridge)return false;auto *b=bridge;QMetaObject::invokeMethod(b,[b]{emit b->backRequested();},Qt::QueuedConnection);return true;
+}
+extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeSessionStop(JNIEnv*,jclass){
+ QMutexLocker lock(&bridgeMutex);if(!bridge)return;auto *b=bridge;QMetaObject::invokeMethod(b,[b]{emit b->stopRequested();},Qt::QueuedConnection);
+}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_furina_black_FurinaActivity_nativeVideo(JNIEnv *env,jclass,jbyteArray array){
  QMutexLocker lock(&bridgeMutex);if(!bridge||!array||!bridge->wantFrame)return false;
  if(bridge->videoPending.fetch_add(1)>=4){--bridge->videoPending;return false;}
@@ -129,3 +148,11 @@ extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeSto
  if(!bridge)return;auto *b=bridge;b->wantFrame=false;QMetaObject::invokeMethod(b,[b]{emit b->captureStopped();},Qt::QueuedConnection);
 }
 #endif
+
+void AndroidBridge::receiveCursor(const QByteArray &packet){
+#ifdef Q_OS_ANDROID
+ QJniEnvironment env;auto array=env->NewByteArray(packet.size());env->SetByteArrayRegion(array,0,packet.size(),reinterpret_cast<const jbyte*>(packet.constData()));QJniObject::callStaticMethod<void>("com/furina/black/CursorLayer","submit","([B)V",array);env->DeleteLocalRef(array);
+#else
+ Q_UNUSED(packet);
+#endif
+}

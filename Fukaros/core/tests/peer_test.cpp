@@ -8,6 +8,35 @@
 class PeerTest:public QObject{
  Q_OBJECT
 private slots:
+ void directTransportDisablesNagleAfterConnect(){
+  Peer server,client;QVERIFY(server.listen(29893,"latency-check","127.0.0.1"));client.connectTo("127.0.0.1",29893,"latency-check");
+  QTRY_VERIFY(server.ready()&&client.ready());
+  auto *socket=client.findChild<QTcpSocket*>("furinaMain");QVERIFY(socket);QCOMPARE(socket->socketOption(QAbstractSocket::LowDelayOption).toInt(),1);
+ }
+ void cursorConnectionIsIndependentOfVideo(){
+  Peer server,client;QSignalSpy cursors(&client,&Peer::cursor),videos(&client,&Peer::video);
+  QVERIFY(server.listen(29894,"cursor-channel","127.0.0.1"));client.connectTo("127.0.0.1",29894,"cursor-channel");
+  QTRY_VERIFY(server.cursorReady()&&client.cursorReady());
+  auto *main=client.findChild<QTcpSocket*>("furinaMain");QVERIFY(main);main->blockSignals(true);
+  QByteArray video(FR_VIDEO_HEADER+65536,0);fr_video_info info{FR_VIDEO_KEY|FR_VIDEO_CURSOR_SEPARATE,1,1200,1920,1,100};QVERIFY(fr_video_write(reinterpret_cast<uint8_t*>(video.data()),&info));QVERIFY(server.sendVideo(video));
+  auto position=fr_cursor_position(123,456,1200,1920,true);server.sendCursor(position);QTRY_COMPARE(cursors.size(),1);QCOMPARE(cursors[0][0].toByteArray(),position);QCOMPARE(videos.size(),0);
+  main->blockSignals(false);QVERIFY(QMetaObject::invokeMethod(main,"readyRead",Qt::DirectConnection));QTRY_COMPARE(videos.size(),1);
+  auto reverse=fr_cursor_position(-3,14,1920,1080,true);QSignalSpy backwards(&server,&Peer::cursor);client.sendCursor(reverse);QTRY_COMPARE(backwards.size(),1);QCOMPARE(backwards[0][0].toByteArray(),reverse);
+  QByteArray invalid=position;invalid[23]=2;server.sendCursor(invalid);QTest::qWait(30);QCOMPARE(cursors.size(),1);
+  client.close();QTRY_VERIFY(!server.cursorReady()&&!client.cursorReady());
+ }
+ void cursorConnectionAuthenticatesAndCoalesces(){
+  QObject owner;QTcpServer listener;QVERIFY(listener.listen(QHostAddress::LocalHost,0));CursorTransport receiver(&owner),sender(&owner);int delivered=0;QByteArray last;
+  receiver.packet=[&](const QByteArray &packet){++delivered;last=packet;};
+  connect(&listener,&QTcpServer::newConnection,&owner,[&]{while(listener.hasPendingConnections())receiver.accept(listener.nextPendingConnection());});
+  const QByteArray key(32,'s');receiver.begin(key,true,{},0);
+  QTcpSocket wrong;wrong.connectToHost(QHostAddress::LocalHost,listener.serverPort());QTRY_COMPARE(wrong.state(),QTcpSocket::ConnectedState);wrong.write(QByteArray(32,'x'));QTRY_COMPARE(wrong.state(),QTcpSocket::UnconnectedState);QVERIFY(!receiver.isReady());
+  sender.begin(key,false,QHostAddress::LocalHost,listener.serverPort());
+  sender.send(fr_cursor_position(1,1,1200,1920,true));auto newest=fr_cursor_position(2,3,1200,1920,true);sender.send(newest);
+  QTRY_VERIFY(sender.isReady()&&receiver.isReady());QTRY_COMPARE(delivered,1);QCOMPARE(last,newest);
+  sender.close();receiver.close();QTRY_VERIFY(owner.findChildren<QTcpSocket*>().isEmpty());
+ }
+
 
  void gracefulStopDrainsCancellation_data(){
   QTest::addColumn<bool>("serverStops");

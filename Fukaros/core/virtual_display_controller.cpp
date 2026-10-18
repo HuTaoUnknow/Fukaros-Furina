@@ -8,8 +8,9 @@
 #endif
 VirtualDisplayController::VirtualDisplayController(QObject *parent):QObject(parent){
  m_poll.setInterval(100);connect(&m_poll,&QTimer::timeout,this,&VirtualDisplayController::poll);
+ m_releaseRetry.setInterval(250);connect(&m_releaseRetry,&QTimer::timeout,this,&VirtualDisplayController::finishRelease);
 }
-VirtualDisplayController::~VirtualDisplayController(){release();}
+VirtualDisplayController::~VirtualDisplayController(){release();m_releaseRetry.stop();}
 bool VirtualDisplayController::available() const{return fr_virtual_available()!=0;}
 QString VirtualDisplayController::screenName() const{return m_qtName;}
 QString VirtualDisplayController::deviceName() const{char name[128]{};return fr_virtual_name(&m_display,name,sizeof(name))?QString::fromUtf8(name):QString();}
@@ -26,6 +27,9 @@ void VirtualDisplayController::fail(const QString &cn,const QString &en){
 }
 void VirtualDisplayController::ensure(bool portrait){
  if(m_preparing)return;
+ // A new session owns the target; an old cleanup timer must not detach it.
+ m_releaseRetry.stop();
+ if(m_display.acquired){const long result=fr_virtual_release(&m_display);if(result){fail("扩展屏清理尚未完成，请稍后重试。","Extension cleanup is still pending. Please retry shortly.");return;}}
  m_preparing=true;m_portrait=portrait;m_elapsed.restart();
  if(available()){acquire();return;}
 #ifdef Q_OS_WIN
@@ -82,6 +86,12 @@ void VirtualDisplayController::release(){
  if(m_installer){CloseHandle(static_cast<HANDLE>(m_installer));m_installer=nullptr;}
 #endif
  m_installing=false;
+ m_releaseRetry.stop();m_releaseAttempts=0;finishRelease();
+}
+void VirtualDisplayController::finishRelease(){
+ if(QGuiApplication::platformName()=="offscreen")return;
  const long result=fr_virtual_release(&m_display);
- if(result)emit status("收起虚拟扩展屏失败，错误："+QString::number(result),"Could not restore the virtual display. Error: "+QString::number(result));
+ if(!result){m_releaseRetry.stop();return;}
+ if(++m_releaseAttempts<8){m_releaseRetry.start();return;}
+ m_releaseRetry.stop();emit status("移除虚拟扩展屏失败，错误："+QString::number(result),"Could not detach the virtual extension. Error: "+QString::number(result));
 }

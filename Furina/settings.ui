@@ -9,7 +9,7 @@
    <item>
     <widget class="QLabel" name="sessionSettingsHint">
      <property name="text">
-      <string>投屏中 · 点击停止后可修改设置</string>
+      <string>投屏中 · 通用设置可调整，连接设置需先停止</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
@@ -113,6 +113,47 @@
             </item>
            </layout>
           </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="pointerGroup">
+         <property name="title"><string>通用设置</string></property>
+         <layout class="QVBoxLayout" name="generalLayout">
+ <item><layout class="QHBoxLayout" name="pointerLayout">
+          <item><widget class="QLabel" name="pointerLabel"><property name="text"><string>副屏为主屏的</string></property></widget></item>
+          <item><widget class="QDoubleSpinBox" name="pointerMultiplier">
+           <property name="minimum"><double>0.250000000000000</double></property>
+           <property name="maximum"><double>4.000000000000000</double></property>
+           <property name="singleStep"><double>0.100000000000000</double></property>
+           <property name="value"><double>1.000000000000000</double></property>
+           <property name="suffix"><string> 倍</string></property>
+           <property name="minimumSize"><size><width>120</width><height>36</height></size></property>
+           <property name="keyboardTracking"><bool>false</bool></property>
+          </widget></item>
+          <item><layout class="QVBoxLayout" name="pointerHelpLayout">
+           <property name="spacing"><number>0</number></property>
+           <item><spacer name="pointerHelpSpring"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>16</height></size></property></spacer></item>
+           <item><widget class="StepHelpButton" name="pointerHelp">
+            <property name="helpTitle" stdset="0"><string>分屏鼠标速率</string></property>
+            <property name="steps" stdset="0"><string>1. 主屏沿用当前系统鼠标速率。
+2. 副屏按此倍率调整：1 倍相同，2 倍更快，0.5 倍更慢。
+3. 修改立即保存，连接后双端同步，投屏时也可调整。
+4. 仅作用于电脑鼠标在扩展屏内的移动；停止扩展后恢复。</string></property>
+           </widget></item>
+          </layout></item>
+         </layout></item>
+         <item><widget class="QFrame" name="cursorSeparator"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
+         <item><layout class="QHBoxLayout" name="cursorMappingRow">
+          <item><widget class="QCheckBox" name="independentCursor"><property name="text"><string>独立映射鼠标</string></property><property name="checked"><bool>true</bool></property></widget></item>
+          <item><layout class="QVBoxLayout" name="cursorMappingHelpLayout"><property name="spacing"><number>0</number></property>
+           <item><spacer name="cursorMappingHelpSpring"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>16</height></size></property></spacer></item>
+           <item><widget class="StepHelpButton" name="cursorMappingHelp"><property name="helpTitle" stdset="0"><string>独立映射鼠标</string></property><property name="steps" stdset="0"><string>1. 勾选后，电脑鼠标的位置和图案通过独立连接发送，移动端直接绘制，减少等待视频的延迟。
+2. 取消勾选后，鼠标与屏幕一起编码传输。
+3. 双端同步并立即保存，投屏期间可切换。独立连接不可用时自动沿用合成方式。
+4. 适用于电脑向移动端投屏。反色图案在独立模式中以黑白轮廓显示。</string></property></widget></item>
+          </layout></item>
+         </layout></item>
          </layout>
         </widget>
        </item>

@@ -13,13 +13,16 @@ public:
  explicit DesktopVideoSender(QObject *parent=nullptr);~DesktopVideoSender() override;
  void start(const QString &display,const QRect &geometry);void stop();
  void refreshDisplay(const QString &display);
+ void setSeparateCursor(bool enabled){m_separateCursor=enabled;}
  void setResolution(int edge);void feedback(double fps,unsigned queueMs,double remoteWorkMs=0);void setReceiverWork(double ms){m_localDecodeMs=ms;}
  void accepted(bool delivered);void requestKeyframe(){m_key=true;}
 signals:
+ void cursorShape(const QByteArray &data);
  void packet(const QByteArray &data);void status(const QString &message);
  void stats(double fps,double workMs,int edge);
  void failed();
 private:
+ std::atomic_bool m_separateCursor{false};
  QThread *m_thread=nullptr;std::atomic_bool m_stop{false},m_key{true},m_pending{false};
  std::atomic_bool m_refresh{false};std::atomic_uint m_epoch{0};
  std::mutex m_sourceMutex;QString m_display;quint64 m_runToken=0;

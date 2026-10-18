@@ -15,6 +15,7 @@ int main(void){
  CHECK(fr_encode_header(h,FR_SESSION,4));CHECK(fr_decode_header(h,&decoded));CHECK(decoded.type==FR_SESSION);
  CHECK(fr_valid_session_action(FR_START_SHARE));CHECK(fr_valid_session_action(FR_RESTORE));
  CHECK(fr_valid_session_action(FR_REQUEST_KEY));CHECK(fr_valid_session_action(FR_START_RECEIVE));CHECK(fr_valid_session_action(FR_STOP_RECEIVE));
- CHECK(!fr_valid_session_action(0));CHECK(!fr_valid_session_action(10));
+ CHECK(fr_valid_session_action(FR_FULLSCREEN_CONFIRMED));CHECK(fr_valid_session_action(FR_RESTORED_CONFIRMED));
+ CHECK(!fr_valid_session_action(0));CHECK(!fr_valid_session_action(12));
  puts("Protocol, session requests and letterbox mapping passed");return 0;
 }

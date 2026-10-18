@@ -31,6 +31,23 @@ public:int opened=0;QUrl last;
 class UiTest:public QObject{
  Q_OBJECT
 private slots:
+ void fullscreenStateRequiresReceiverConfirmation(){
+  MainWindow w;w.show();auto *peer=w.findChild<Peer*>();auto *consent=w.findChild<SessionConsent*>();auto *maximize=w.findChild<QPushButton*>("maximize");
+  Peer other;QSignalSpy actions(&other,&Peer::session);QVERIFY(other.listen(29910,"fullscreen-state-code","127.0.0.1"));peer->connectTo("127.0.0.1",29910,"fullscreen-state-code");QTRY_VERIFY(peer->ready()&&other.ready());
+  other.sendApproval(4801,FR_APPROVAL_REQUEST,FR_APPROVAL_RECEIVE);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(consent->sharing());
+  QCOMPARE(maximize->toolTip(),QString("放大"));
+  other.sendSession(FR_FULLSCREEN_CONFIRMED);QTRY_COMPARE(maximize->toolTip(),QString("还原"));QVERIFY(!w.isFullScreen());
+  maximize->click();QTRY_VERIFY(actionSeen(actions,FR_RESTORE));QCOMPARE(maximize->toolTip(),QString("还原"));
+  other.sendSession(FR_RESTORED_CONFIRMED);QTRY_COMPARE(maximize->toolTip(),QString("放大"));
+  actions.clear();maximize->click();maximize->click();QTRY_COMPARE(actions.count(),2);QCOMPARE(actions[0][0].toUInt(),quint32(FR_MAXIMIZE));QCOMPARE(actions[1][0].toUInt(),quint32(FR_RESTORE));
+  other.sendSession(FR_FULLSCREEN_CONFIRMED);other.sendSession(FR_RESTORED_CONFIRMED);QTRY_COMPARE(maximize->toolTip(),QString("放大"));QTest::qWait(30);QCOMPARE(actions.count(),2);
+  other.sendApproval(4801,FR_APPROVAL_CANCEL,FR_APPROVAL_RECEIVE);QTRY_VERIFY(!consent->active());other.sendSession(FR_FULLSCREEN_CONFIRMED);QTest::qWait(30);QCOMPARE(maximize->toolTip(),QString("放大"));
+  actions.clear();other.sendApproval(4802,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(consent->active()&&!consent->sharing());
+  QTRY_VERIFY(actionSeen(actions,FR_RESTORED_CONFIRMED));actions.clear();maximize->click();QTRY_VERIFY(w.isFullScreen());QTRY_VERIFY(actionSeen(actions,FR_FULLSCREEN_CONFIRMED));
+  w.findChild<ScreenView*>()->leaveFullScreen();QTRY_VERIFY(!w.isFullScreen());QTRY_VERIFY(actionSeen(actions,FR_RESTORED_CONFIRMED));
+  actions.clear();other.sendSession(FR_RESTORE);QTRY_COMPARE(actions.count(),1);QCOMPARE(actions[0][0].toUInt(),quint32(FR_RESTORED_CONFIRMED));
+  other.close();QTRY_VERIFY(!peer->ready());QCOMPARE(maximize->toolTip(),QString("放大"));
+ }
  void chineseDebugParameters(){
   const QString english="width=1920 height=1080 fps=60 latency=3 ms target=60 FPS codec=h264 GPU=1.5 ms";
   const auto entry=furinaLog(english,english);const auto chinese=entry.section('\n',0,0);

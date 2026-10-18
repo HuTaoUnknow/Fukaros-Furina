@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Furina VERSION 0.4.14 LANGUAGES C CXX)
+project(Furina VERSION 0.4.18 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
@@ -28,8 +28,8 @@ if(ANDROID)
   QT_ANDROID_TARGET_SDK_VERSION 35
   QT_ANDROID_COMPILE_SDK_VERSION 36
   QT_ANDROID_SDK_BUILD_TOOLS_REVISION "36.0.0"
-  QT_ANDROID_VERSION_CODE 18
-  QT_ANDROID_VERSION_NAME "0.4.14")
+  QT_ANDROID_VERSION_CODE 22
+  QT_ANDROID_VERSION_NAME "0.4.18")
 elseif(MINGW)
  target_link_options(Furina PRIVATE -mwindows)
 endif()
@@ -93,5 +93,25 @@ endforeach()
 foreach(mobile_target Furina black_ui_test)
  if(TARGET ${mobile_target})
   target_sources(${mobile_target} PRIVATE core/mobile_layout.cpp core/mobile_layout.h)
+ endif()
+endforeach()
+
+foreach(pointer_target Furina black_ui_test)
+ if(TARGET ${pointer_target})
+  target_sources(${pointer_target} PRIVATE core/pointer_settings.cpp core/pointer_settings.h)
+ endif()
+endforeach()
+
+if(WIN32)
+ foreach(cursor_capture_target Fukaros ui_test Furina black_ui_test display_recovery_smoke quality_smoke portrait_capture_smoke)
+  if(TARGET ${cursor_capture_target})
+   target_link_libraries(${cursor_capture_target} PRIVATE runtimeobject gdi32)
+  endif()
+ endforeach()
+endif()
+
+foreach(presentation_target Furina black_ui_test)
+ if(TARGET ${presentation_target})
+  target_sources(${presentation_target} PRIVATE core/presentation_sync.cpp core/presentation_sync.h)
  endif()
 endforeach()

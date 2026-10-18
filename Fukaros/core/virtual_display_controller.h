@@ -23,9 +23,10 @@ signals:
  void failed(const QString &chinese,const QString &english);
 private:
  fr_virtual_display m_display{};
- QTimer m_poll;QElapsedTimer m_elapsed;
+ QTimer m_poll,m_releaseRetry;QElapsedTimer m_elapsed;
+ unsigned m_releaseAttempts=0;
  bool m_preparing=false,m_installing=false,m_portrait=false;
  QString m_qtName;
  void *m_installer=nullptr;
- void acquire();void poll();void fail(const QString &cn,const QString &en);
+ void acquire();void poll();void fail(const QString &cn,const QString &en);void finishRelease();
 };

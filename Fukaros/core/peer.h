@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QImage>
 #include "furina_protocol.h"
+#include "cursor_transport.h"
 class Peer : public QObject {
  Q_OBJECT
 public:
@@ -26,6 +27,10 @@ public:
  void sendApproval(quint32 id,quint32 verb,quint32 options);
  bool sendVideo(const QByteArray &packet);
  void sendProfile(int edge);
+ void sendPointerSpeed(int percent,quint64 revision);
+ void sendCursorPreference(bool enabled,quint64 revision);
+ void sendCursor(const QByteArray &data){m_cursor.send(data);}
+ bool cursorReady()const{return m_cursor.isReady();}
  void sendFeedback(double fps,double workMs,unsigned queueMs,double displayedFps);
  unsigned videoQueueMs() const;
 signals:
@@ -39,8 +44,12 @@ signals:
  void approval(quint32 id,quint32 verb,quint32 options);
  void video(const QByteArray &packet);
  void profile(int edge);
+ void pointerSpeed(int percent,quint64 revision);
+ void cursorPreference(bool enabled,quint64 revision);
+ void cursorConnection(bool ready);void cursor(const QByteArray &data);
  void feedback(double fps,double workMs,unsigned queueMs,double displayedFps);
 private:
+ CursorTransport m_cursor;
  QTcpServer m_server;
  QTcpSocket *m_socket=nullptr;
  QTimer m_tick;
@@ -49,7 +58,7 @@ private:
  QString m_token;
  bool m_serverSide=false,m_ready=false,m_waitVideoKey=false;
  int m_pendingPings=0;
- void attach(QTcpSocket *socket,bool server);
+ void attach(QTcpSocket *socket,bool server);void startCursor();
  void read();
  void handle(quint8 type,const QByteArray &payload);
  void send(quint8 type,const QByteArray &payload={});

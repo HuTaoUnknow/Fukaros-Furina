@@ -38,12 +38,12 @@ void fr_video_dimensions(int w,int h,int edge,int *out_w,int *out_h){
  *out_w=((int)(w*scale)/2)*2;*out_h=((int)(h*scale)/2)*2;if(*out_w<2)*out_w=2;if(*out_h<2)*out_h=2;
 }
 int fr_video_write(uint8_t *p,const fr_video_info *i){
- if(!p||!i||i->flags>FR_VIDEO_KEY||i->width<2||i->height<2||i->width>4096||i->height>4096||(i->width&1)||(i->height&1))return 0;
+ if(!p||!i||(i->flags&~(FR_VIDEO_KEY|FR_VIDEO_CURSOR_SEPARATE))||i->width<2||i->height<2||i->width>4096||i->height>4096||(i->width&1)||(i->height&1))return 0;
  fr_put_u32(p,i->flags);fr_put_u32(p+4,i->sequence);fr_put_u32(p+8,i->width);fr_put_u32(p+12,i->height);
  fr_put_u32(p+16,(uint32_t)(i->pts_us>>32));fr_put_u32(p+20,(uint32_t)i->pts_us);fr_put_u32(p+24,i->epoch);fr_put_u32(p+28,1);return 1;
 }
 int fr_video_read(const uint8_t *p,size_t n,fr_video_info *i){
  if(!p||!i||n<=FR_VIDEO_HEADER||n>FR_MAX_PAYLOAD||fr_get_u32(p+28)!=1)return 0;
  i->flags=fr_get_u32(p);i->sequence=fr_get_u32(p+4);i->width=fr_get_u32(p+8);i->height=fr_get_u32(p+12);i->pts_us=((uint64_t)fr_get_u32(p+16)<<32)|fr_get_u32(p+20);i->epoch=fr_get_u32(p+24);
- return i->flags<=FR_VIDEO_KEY&&i->width>=2&&i->height>=2&&i->width<=4096&&i->height<=4096&&!(i->width&1)&&!(i->height&1);
+ return !(i->flags&~(FR_VIDEO_KEY|FR_VIDEO_CURSOR_SEPARATE))&&i->width>=2&&i->height>=2&&i->width<=4096&&i->height<=4096&&!(i->width&1)&&!(i->height&1);
 }

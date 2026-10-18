@@ -107,9 +107,11 @@ long fr_virtual_acquire_oriented(fr_virtual_display *d,int portrait){
  done:free(active);free(paths);free(modes);if(result){free(d->paths);free(d->modes);memset(d,0,sizeof(*d));}return result;
 }
 long fr_virtual_release(fr_virtual_display *d){
- LONG result;if(!d||!d->acquired)return 0;
- if(d->original_attached)result=SetDisplayConfig(d->path_count,d->paths,d->mode_count,d->modes,SDC_APPLY|SDC_USE_SUPPLIED_DISPLAY_CONFIG|SDC_ALLOW_CHANGES|SDC_SAVE_TO_DATABASE);
- else result=fr_virtual_detach_idle();
+ LONG result;if(!d)return ERROR_INVALID_PARAMETER;
+ /* An earlier crash, driver installation or old second instance may have
+  * left this target attached before acquire. Never restore that stale target.
+  * Query the current topology so physical monitor changes remain intact. */
+ result=fr_virtual_detach_idle();
  if(!result){free(d->paths);free(d->modes);memset(d,0,sizeof(*d));}return result;
 }
 long fr_virtual_get_position(const fr_virtual_display *d,long *x,long *y){

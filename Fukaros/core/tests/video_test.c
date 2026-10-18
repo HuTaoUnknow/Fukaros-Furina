@@ -36,5 +36,6 @@ int main(void){
  uint8_t data[33]={0};fr_video_info in={FR_VIDEO_KEY,123,1920,1200,8,0x123456789ABCULL},out;
  CHECK(fr_video_write(data,&in));data[32]=1;CHECK(fr_video_read(data,sizeof data,&out));CHECK(in.flags==out.flags&&in.sequence==out.sequence&&in.width==out.width&&in.height==out.height&&in.epoch==out.epoch&&in.pts_us==out.pts_us);
  CHECK(!fr_video_read(data,32,&out));data[31]=2;CHECK(!fr_video_read(data,sizeof data,&out));data[31]=1;fr_put_u32(data+8,1921);CHECK(!fr_video_read(data,sizeof data,&out));in.width=1921;CHECK(!fr_video_write(data,&in));
+ in.width=1200;in.flags=FR_VIDEO_KEY|FR_VIDEO_CURSOR_SEPARATE;CHECK(fr_video_write(data,&in));CHECK(fr_video_read(data,sizeof data,&out));CHECK(out.flags==3);in.flags=4;CHECK(!fr_video_write(data,&in));
  puts("Progressive auto resolution, five-second frame-loss threshold, timing and H.264 envelope passed");return 0;
 }

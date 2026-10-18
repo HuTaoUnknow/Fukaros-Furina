@@ -103,12 +103,12 @@ public final class VideoCore {
     }
     public static void releaseActivity(){
         synchronized(VideoCore.class){if(decoder!=null){Decoder old=decoder;decoder=null;old.handler.post(()->{old.close();old.output=null;old.handler.removeCallbacksAndMessages(null);old.thread.quitSafely();});}}
-        texture=null;visible=false;
+        texture=null;visible=false;CursorLayer.release();
     }
     public static void setCaptureEdge(int edge){captureEdge=edge;CaptureService.reconfigureVideo(edge);}
     public static void requestKeyframe(){Encoder encoder=activeEncoder;if(encoder!=null)encoder.handler.post(encoder::requestKey);}
     public static void submit(byte[] packet){synchronized(VideoCore.class){if(decoder==null)decoder=new Decoder();decoder.offer(packet);}}
-    public static void reset(){synchronized(VideoCore.class){if(decoder!=null)decoder.reset();}FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(()->{visible=false;if(texture!=null)texture.setVisibility(View.GONE);});}
+    public static void reset(){CursorLayer.reset();synchronized(VideoCore.class){if(decoder!=null)decoder.reset();}FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(()->{visible=false;if(texture!=null)texture.setVisibility(View.GONE);CursorLayer.show(a,viewX,viewY,viewW,viewH,false);});}
     public static void show(int x,int y,int width,int height,boolean show,boolean fullscreen){
         FurinaActivity a=FurinaActivity.currentActivity();if(a==null)return;
         a.runOnUiThread(()->{
@@ -128,41 +128,68 @@ public final class VideoCore {
     private static void fit(){
         if(texture==null)return;Decoder d=decoder;int width=viewW,height=viewH;
         if(d!=null&&d.width>1&&d.height>1){float scale=Math.min(viewW/(float)d.width,viewH/(float)d.height);width=Math.max(1,(int)(d.width*scale));height=Math.max(1,(int)(d.height*scale));}
-        FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(Math.max(1,width),Math.max(1,height));params.leftMargin=viewX+(viewW-width)/2;params.topMargin=viewY+(viewH-height)/2;texture.setLayoutParams(params);
+        FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(Math.max(1,width),Math.max(1,height));params.leftMargin=viewX+(viewW-width)/2;params.topMargin=viewY+(viewH-height)/2;texture.setLayoutParams(params);CursorLayer.show(FurinaActivity.currentActivity(),params.leftMargin,params.topMargin,params.width,params.height,visible);
     }
     private static final class Decoder {
         final AtomicInteger presented=new AtomicInteger();
         final HandlerThread thread=new HandlerThread("furina-video-decode");final Handler handler;
         final ArrayDeque<byte[]> queue=new ArrayDeque<>();
+        final Runnable consumeTask=this::consume;
+        volatile boolean surfaceReady;
         MediaCodec codec;Surface output;int width,height,epoch,frames;boolean waitKey=true,scheduled;
-        long sample=SystemClock.elapsedRealtime(),workNs,firstPts=-1,renderAnchor;
+        final java.util.TreeMap<Long,Boolean> cursorModes=new java.util.TreeMap<>();
+        long sample=SystemClock.elapsedRealtime(),workNs;
         Decoder(){thread.start();handler=new Handler(thread.getLooper());handler.postDelayed(this::statistics,1000);}
-        void offer(byte[] packet){if(packet==null||packet.length<=HEADER)return;
+        void offer(byte[] packet){if(!surfaceReady||packet==null||packet.length<=HEADER)return;
             synchronized(queue){if(queue.size()>=6){queue.clear();waitKey=true;handler.post(this::close);FurinaActivity.nativeNeedKey();}
                 if(waitKey&&(ByteBuffer.wrap(packet).getInt()&KEY)==0)return;waitKey=false;queue.add(packet);schedule();}
         }
-        void schedule(){if(!scheduled){scheduled=true;handler.post(this::consume);}}
-        void surface(Surface surface){handler.post(()->{close();output=surface;synchronized(queue){waitKey=true;queue.clear();}FurinaActivity.nativeNeedKey();if(output!=null&&Build.VERSION.SDK_INT>=30)output.setFrameRate(FPS,Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);});}
+        void schedule(){if(!scheduled){scheduled=true;handler.post(consumeTask);}}
+        void surface(Surface surface){
+            surfaceReady=surface!=null;
+            handler.post(()->{
+                handler.removeCallbacks(consumeTask);close();output=surface;
+                synchronized(queue){waitKey=true;queue.clear();scheduled=false;}
+                // Home destroys the Surface, not the approved peer session.
+                // Request fresh references only when a replacement is ready.
+                if(output!=null){FurinaActivity.nativeNeedKey();if(Build.VERSION.SDK_INT>=30)output.setFrameRate(FPS,Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);}
+            });
+        }
         void reset(){handler.post(()->{close();synchronized(queue){queue.clear();waitKey=true;}frames=0;presented.set(0);});}
-        void close(){if(codec!=null){try{codec.stop();}catch(Exception ignored){}codec.release();codec=null;}firstPts=-1;}
+        void close(){if(codec!=null){try{codec.stop();}catch(Exception ignored){}codec.release();codec=null;}cursorModes.clear();}
         void consume(){
             try{
-                if(output==null){synchronized(queue){scheduled=false;}return;}
-                byte[] packet;synchronized(queue){packet=queue.peek();}if(packet==null){drain();if(codec!=null){synchronized(queue){scheduled=true;handler.postDelayed(this::consume,2);}}else{synchronized(queue){scheduled=false;}}return;}
+                if(output==null||!surfaceReady){synchronized(queue){scheduled=false;}return;}
+                byte[] packet;synchronized(queue){packet=queue.peek();}if(packet==null){drain();if(codec!=null){synchronized(queue){scheduled=true;handler.postDelayed(consumeTask,2);}}else{synchronized(queue){scheduled=false;}}return;}
                 ByteBuffer header=ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN);int flags=header.getInt(),sequence=header.getInt(),w=header.getInt(),h=header.getInt();long pts=header.getLong();int e=header.getInt();
                 if(codec==null||epoch!=e){
                     if((flags&KEY)==0){synchronized(queue){if(queue.peek()==packet)queue.poll();waitKey=true;scheduled=false;}FurinaActivity.nativeNeedKey();return;}
                     close();String name=findCodec(false,w,h);if(name==null)throw new IllegalStateException("No hardware decoder supporting "+w+"x"+h+"@60");
                     codec=MediaCodec.createByCodecName(name);MediaFormat format=MediaFormat.createVideoFormat("video/avc",w,h);format.setInteger(MediaFormat.KEY_PRIORITY,0);format.setInteger(MediaFormat.KEY_FRAME_RATE,FPS);if(Build.VERSION.SDK_INT>=30)format.setInteger(MediaFormat.KEY_LOW_LATENCY,1);
-                    codec.configure(format,output,null,0);codec.setOnFrameRenderedListener((c,renderPts,nano)->presented.incrementAndGet(),handler);codec.start();width=w;height=h;epoch=e;FurinaActivity.nativeStatus("安卓 H.264 硬件解码：解码器 "+name+"，分辨率 "+w+"×"+h+" 像素，目标帧率 60 帧/秒\nEN: Android hardware H.264 decoding: codec "+name+", resolution "+w+"x"+h+", target 60 FPS");FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(VideoCore::fit);
+                    codec.configure(format,output,null,0);codec.setOnFrameRenderedListener((c,renderPts,nano)->{presented.incrementAndGet();java.util.Map.Entry<Long,Boolean> entry=cursorModes.floorEntry(renderPts);if(entry!=null){CursorLayer.mode(entry.getValue());cursorModes.headMap(renderPts,true).clear();}},handler);codec.start();width=w;height=h;epoch=e;FurinaActivity.nativeStatus("安卓 H.264 硬件解码：解码器 "+name+"，分辨率 "+w+"×"+h+" 像素，目标帧率 60 帧/秒\nEN: Android hardware H.264 decoding: codec "+name+", resolution "+w+"x"+h+", target 60 FPS");FurinaActivity a=FurinaActivity.currentActivity();if(a!=null)a.runOnUiThread(VideoCore::fit);
                 }
                 long start=System.nanoTime();int index=codec.dequeueInputBuffer(0);
-                if(index>=0){ByteBuffer buffer=codec.getInputBuffer(index);buffer.clear();buffer.put(packet,HEADER,packet.length-HEADER);codec.queueInputBuffer(index,0,packet.length-HEADER,pts,0);synchronized(queue){if(queue.peek()==packet)queue.poll();}}
+                if(index>=0){ByteBuffer buffer=codec.getInputBuffer(index);buffer.clear();buffer.put(packet,HEADER,packet.length-HEADER);cursorModes.put(pts,(flags&2)!=0);while(cursorModes.size()>120)cursorModes.pollFirstEntry();codec.queueInputBuffer(index,0,packet.length-HEADER,pts,0);synchronized(queue){if(queue.peek()==packet)queue.poll();}}
                 drain();workNs+=System.nanoTime()-start;
-                synchronized(queue){if(!queue.isEmpty()){scheduled=true;handler.postDelayed(this::consume,index<0?1:0);}else{scheduled=true;handler.postDelayed(this::consume,2);}}
+                synchronized(queue){if(!queue.isEmpty()){scheduled=true;handler.postDelayed(consumeTask,index<0?1:0);}else{scheduled=true;handler.postDelayed(consumeTask,2);}}
             }catch(Exception e){FurinaActivity.nativeStatus("视频解码失败："+e);close();synchronized(queue){queue.clear();waitKey=true;scheduled=false;}FurinaActivity.nativeNeedKey();}
         }
-        void drain(){if(codec==null)return;MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int index;while((index=codec.dequeueOutputBuffer(info,0))>=0){long now=System.nanoTime();if(firstPts<0){firstPts=info.presentationTimeUs;renderAnchor=now+50000000L;}long deadline=renderAnchor+(info.presentationTimeUs-firstPts)*1000L;if(deadline<now){renderAnchor+=now+16666666L-deadline;deadline=now+16666666L;}if(deadline>now+150000000L){firstPts=info.presentationTimeUs;renderAnchor=now+50000000L;deadline=renderAnchor;}codec.releaseOutputBuffer(index,deadline);++frames;}}
+        void drain(){
+            if(codec==null)return;
+            MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int latest=-1;
+            // Live desktop viewing needs the newest decoded picture at the next
+            // display refresh, not a fixed 50 ms playback timeline. Keep all
+            // compressed reference frames; discard only superseded OUTPUTs.
+            for(int n=0;n<8;++n){
+                int index=codec.dequeueOutputBuffer(info,0);
+                if(index==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)continue;
+                if(index<0)break;
+                if((info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)!=0){codec.releaseOutputBuffer(index,false);continue;}
+                if(latest>=0)codec.releaseOutputBuffer(latest,false);
+                latest=index;++frames;
+            }
+            if(latest>=0)codec.releaseOutputBuffer(latest,true);
+        }
         void statistics(){long now=SystemClock.elapsedRealtime(),elapsed=now-sample;if(elapsed>0){int count=presented.getAndSet(0),pending;synchronized(queue){pending=queue.size();}if(codec!=null)FurinaActivity.nativeVideoStats(false,frames*1000.0/elapsed,frames==0?0:workNs/1000000.0/frames,pending*1000/FPS,count*1000.0/elapsed,width,height,elapsed);frames=0;workNs=0;sample=now;}handler.postDelayed(this::statistics,1000);}
     }
 }

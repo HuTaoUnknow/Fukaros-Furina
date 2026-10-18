@@ -7,9 +7,13 @@
 #include <QDialog>
 #include "cast_source.h"
 #include "peer.h"
+#include "pointer_settings.h"
+#include "desktop_pointer.h"
+#include "desktop_cursor_stream.h"
 #include "screenview.h"
 #include "interface_support.h"
 #include "session_consent.h"
+#include "presentation_sync.h"
 #include "cast_ui_state.h"
 #include "cast_control.h"
 #include "adb.h"
@@ -26,9 +30,10 @@ public:
 protected:
  void resizeEvent(QResizeEvent *event) override;
 private:
- Ui::MainWindow *ui;Ui::SettingsDialog *cfg;QDialog *m_settings;DirectionChoice *m_direction;SessionConsent *m_consent;CastUiState *m_castUi;CastControl *m_castControl;
+ Ui::MainWindow *ui;Ui::SettingsDialog *cfg;QDialog *m_settings;DirectionChoice *m_direction;SessionConsent *m_consent;PresentationSync *m_presentationSync;CastUiState *m_castUi;CastControl *m_castControl;
  Peer m_peer;Adb m_adb;UsbNetwork m_usbNetwork;ScreenView *m_view;Presentation *m_presentation;
- VirtualDisplayController m_virtual;
+ VirtualDisplayController m_virtual;DesktopPointer m_pointer;
+ DesktopCursorStream *m_cursorStream=nullptr;bool m_independentCursor=true;void updateCursorMapping();
  DisplayPosition *m_position;
  DesktopVideoSender m_videoSender;DesktopVideoReceiver m_videoReceiver;ResolutionChoice *m_resolution;
  QElapsedTimer m_displaySample;double m_encodeWorkMs=0;

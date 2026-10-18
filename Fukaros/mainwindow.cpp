@@ -17,7 +17,7 @@ MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindo
  ui->setupUi(this);cfg->setupUi(m_settings);furinaConfigureSettingsScroll(cfg->settingsScroll);cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");setStyleSheet(furinaStyle());furinaConfigureToolIcons(ui->settings,ui->maximize);setWindowIcon(QIcon(":/icons/app.png"));setWindowTitle("Fukaros · 电脑端");resize(1180,760);
  m_view=new ScreenView(this);ui->viewLayout->addWidget(m_view);m_view->setInteractive(true);
  m_presentation=new Presentation(this,ui->sidebar,ui->bottomPanel,m_view);
- m_resolution=new ResolutionChoice(this);m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_castUi=new CastUiState(this);m_castControl=new CastControl(this,m_castUi,&m_peer);
+ m_resolution=new ResolutionChoice(this);m_direction=new DirectionChoice(this);m_consent=new SessionConsent(&m_peer,this);m_presentationSync=new PresentationSync(&m_peer,m_presentation,m_consent,this);connect(m_presentationSync,&PresentationSync::remoteChanged,this,[this](bool on){m_remoteMax=on;furinaSetMaximizeIcon(ui->maximize,on||m_presentation->active());});connect(m_presentationSync,&PresentationSync::status,this,[this](const QString &cn,const QString &en){log(cn,en);});m_castUi=new CastUiState(this);m_castControl=new CastControl(this,m_castUi,&m_peer);
  m_position=new DisplayPosition(this,[this](QPoint *position){return m_virtual.position(position);},[this](const QPoint &position){return m_virtual.setPosition(position);});
  connect(m_position,&DisplayPosition::status,this,[this](const QString &cn,const QString &en){log(cn,en);});
  connect(m_position,&DisplayPosition::cancelled,this,&MainWindow::stop);
@@ -30,7 +30,7 @@ MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindo
  connect(m_consent,&SessionConsent::incoming,this,[this]{m_castUi->lockPending();m_pending=false;m_presentation->setActive(false);});
  connect(m_consent,&SessionConsent::ended,this,&MainWindow::endSession);
  connect(m_consent,&SessionConsent::approved,this,[this](bool sharing,bool extended,bool initiatedHere){
-  m_castUi->occupy(sharing,extended);log("投屏方式已锁定，仅清晰度可调整；点击停止后可修改方式。","Casting options are locked; resolution can still change. Press Stop to change the casting mode.");m_pending=false;m_direction->setSharing(sharing);{const QSignalBlocker a(ui->duplicate),b(ui->extend);(extended?ui->extend:ui->duplicate)->setChecked(true);}
+  m_castUi->occupy(sharing,extended);log("投屏方式已锁定，清晰度与通用设置可调整；点击停止后可修改方式。","Casting options are locked; resolution and general settings can still change. Press Stop to change the casting mode.");m_pending=false;m_direction->setSharing(sharing);{const QSignalBlocker a(ui->duplicate),b(ui->extend);(extended?ui->extend:ui->duplicate)->setChecked(true);}
   ui->modePanel->setVisible(sharing);m_sessionActive=true;
   m_view->setInteractive(!sharing);refreshScreens();
   if(initiatedHere)applyDirection();
@@ -55,7 +55,11 @@ MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindo
   if(!m_peer.ready()||!ui->share->isChecked()||castMode()!=FR_CAST_EXTEND){m_virtual.release();return;}
   refreshScreens();m_sessionActive=startSharing()||ui->receive->isChecked();
  });
- loadSettings();auto *modeGroup=new QButtonGroup(this);modeGroup->addButton(ui->duplicate);modeGroup->addButton(ui->extend);modeGroup->setExclusive(true);QSettings s;if(s.value("castMode",0).toInt()==1)ui->extend->setChecked(true);
+ loadSettings();
+ m_cursorStream=new DesktopCursorStream(this,[this](const QByteArray &data){m_peer.sendCursor(data);});m_cursorStream->shapeChanged=[this]{updateCursorMapping();};
+ connect(&m_peer,&Peer::cursorConnection,this,[this](bool ready){updateCursorMapping();log(ready?"独立鼠标通道已连接。":"独立鼠标通道已断开，鼠标沿用视频合成。",ready?"Independent cursor channel connected.":"Cursor channel disconnected; using video composition.");});
+ connect(&m_videoSender,&DesktopVideoSender::cursorShape,this,[this](const QByteArray &shape){m_cursorStream->setShape(shape);updateCursorMapping();});
+ auto *pointerSettings=new PointerSettings(&m_peer,this,true);m_independentCursor=pointerSettings->independentCursor();connect(pointerSettings,&PointerSettings::independentCursorChanged,this,[this](bool enabled){m_independentCursor=enabled;updateCursorMapping();log(enabled?"已启用独立映射鼠标。":"已切换为鼠标与屏幕合成传输。",enabled?"Independent cursor mapping enabled.":"Cursor is composited into the video.");});m_pointer.setMultiplier(pointerSettings->multiplier());connect(pointerSettings,&PointerSettings::changed,&m_pointer,&DesktopPointer::setMultiplier);connect(&m_pointer,&DesktopPointer::status,this,[this](const QString &text){log(text);});auto *modeGroup=new QButtonGroup(this);modeGroup->addButton(ui->duplicate);modeGroup->addButton(ui->extend);modeGroup->setExclusive(true);QSettings s;if(s.value("castMode",0).toInt()==1)ui->extend->setChecked(true);
  connect(m_castControl,&CastControl::startRequested,this,&MainWindow::start);
  connect(m_castControl,&CastControl::stopRequested,this,&MainWindow::stop);
  connect(ui->settings,&QPushButton::clicked,this,&MainWindow::openSettings);
@@ -107,7 +111,7 @@ MainWindow::MainWindow(QWidget *parent):QMainWindow(parent),ui(new Ui::MainWindo
  connect(&m_screenshot,&QProcess::errorOccurred,this,[this](QProcess::ProcessError){log("ADB 启动失败："+m_screenshot.errorString(),"ADB could not start: "+m_screenshot.errorString());m_preview.stop();m_screenshotTimeout.stop();});
  log("等待投屏。请在设置中填写连接信息，再选择方向并按开始。","Waiting for a stream. Configure connection settings, choose a direction, then press Start.");
 }
-MainWindow::~MainWindow(){stop();saveSettings();disconnect(&m_virtual,nullptr,this,nullptr);delete cfg;delete ui;}
+MainWindow::~MainWindow(){stop();saveSettings();disconnect(&m_virtual,nullptr,this,nullptr);delete m_cursorStream;delete cfg;delete ui;}
 void MainWindow::log(const QString &message,const QString &english){const auto entry=furinaLog(message,english);if(!entry.isEmpty())ui->log->appendPlainText(entry);}
 void MainWindow::loadSettings(){
  QSettings s;QString adb=s.value("adb",QStandardPaths::findExecutable("adb")).toString();
@@ -143,8 +147,8 @@ void MainWindow::start(){
  }
 }
 void MainWindow::connectUsb(int generation){m_adb.run({"forward","tcp:27183","tcp:27183"},[this,generation](bool ok,QByteArray){if(generation!=m_generation)return;if(ok)m_peer.connectTo("127.0.0.1",27183,cfg->token->text());else{m_pending=false;m_castUi->connectionLost();}},true);}
-void MainWindow::stopSharing(){if(m_sharing){m_peer.sendStatus(furinaStatus("电脑屏幕共享已停止","PC screen sharing stopped"));m_position->rememberCurrent();}m_position->reset();m_sharing=false;m_layoutRefresh.stop();m_capture.stop();m_videoSender.stop();m_captureScreen.clear();m_captureName.clear();m_virtual.release();}
-void MainWindow::stop(){m_castUi->reset();
+void MainWindow::stopSharing(){if(m_cursorStream)m_cursorStream->stop();m_videoSender.setSeparateCursor(false);m_pointer.stop();if(m_sharing){m_peer.sendStatus(furinaStatus("电脑屏幕共享已停止","PC screen sharing stopped"));m_position->rememberCurrent();}m_position->reset();m_sharing=false;m_layoutRefresh.stop();m_capture.stop();m_videoSender.stop();m_captureScreen.clear();m_captureName.clear();m_virtual.release();}
+void MainWindow::stop(){m_presentationSync->reset();m_castUi->reset();
  m_consent->cancel();m_usbNetwork.cancel();++m_generation;m_peer.sendSession(FR_STOP_SHARE);m_peer.sendSession(FR_STOP_RECEIVE);m_peer.sendSession(FR_RESTORE);stopSharing();m_pending=false;m_sessionActive=false;m_adbOnly=false;m_remoteMax=false;m_deviceSize={};
  m_preview.stop();m_screenshotTimeout.stop();m_screenshot.kill();m_screenshot.waitForFinished(1000);m_adb.cancel();m_peer.close(true);m_presentation->setActive(false);m_videoReceiver.reset();m_view->setImage({});furinaSetMaximizeIcon(ui->maximize,false);
 }
@@ -189,7 +193,7 @@ void MainWindow::rebindCapture(){
  // Keep the monitor identity and the peer session, rather than detaching the virtual screen.
  for(auto *screen:QGuiApplication::screens())if(screen->name()==m_captureName&&usableScreen(screen)){m_captureScreen=screen;break;}
  const QString device=castMode()==FR_CAST_EXTEND?m_virtual.deviceName():m_captureName;
- if(!device.isEmpty())m_videoSender.refreshDisplay(device);
+ if(!device.isEmpty()){m_videoSender.refreshDisplay(device);m_cursorStream->setDisplay(device);if(castMode()==FR_CAST_EXTEND)m_pointer.setDisplay(device);}
  m_position->rememberCurrent();
  log("显示器布局已变更，正在重新绑定采集并恢复窗口画面。","Display layout changed. Rebinding capture and restoring live windows.");
 }
@@ -210,7 +214,7 @@ bool MainWindow::startSharing(){
  }
  auto *source=selectedScreen();
  if(!source){log("扩展暂不可用：请先启用第二块或虚拟显示器。","Extend is unavailable. Enable a second or virtual display first.");return false;}
- m_sharing=true;m_captureScreen=source;m_captureName=source->name();if(QGuiApplication::platformName()=="offscreen")m_capture.start();else{m_videoSender.setResolution(m_resolution->value());const QString device=castMode()==FR_CAST_EXTEND?m_virtual.deviceName():source->name();m_videoSender.start(device,source->geometry());}
+ m_sharing=true;m_captureScreen=source;m_captureName=source->name();if(QGuiApplication::platformName()=="offscreen")m_capture.start();else{m_videoSender.setResolution(m_resolution->value());const QString device=castMode()==FR_CAST_EXTEND?m_virtual.deviceName():source->name();m_videoSender.start(device,source->geometry());m_cursorStream->setDisplay(device);updateCursorMapping();if(castMode()==FR_CAST_EXTEND)m_pointer.setDisplay(device);}
  const auto cn=QString("电脑%1投屏已启动：%2").arg(castMode()==FR_CAST_EXTEND?"扩展":"复制",source->name());
  const auto en=QString("PC %1 sharing started: %2").arg(castMode()==FR_CAST_EXTEND?"extended desktop":"duplicate screen",source->name());
  log(cn,en);m_peer.sendSession(castMode()==FR_CAST_EXTEND?FR_EXTEND:FR_DUPLICATE);m_peer.sendStatus(furinaStatus(cn,en));return true;
@@ -222,10 +226,12 @@ void MainWindow::session(quint32 action){
  else if(action==FR_START_RECEIVE){if(!m_consent->active()||m_consent->sharing())return;m_pending=false;m_sessionActive=true;}
  else if(action==FR_STOP_RECEIVE){m_videoReceiver.reset();m_view->setImage({});}
  else if(action==FR_DUPLICATE||action==FR_EXTEND){if(m_castUi->occupied()&&ui->extend->isChecked()!=(action==FR_EXTEND)){log("投屏方式已锁定，忽略会话中的模式更改。","Casting options are locked. Ignoring an in-session mode change.");return;}if(!m_consent->active()||!m_consent->sharing())return;const QSignalBlocker a(ui->duplicate),b(ui->extend);(action==FR_EXTEND?ui->extend:ui->duplicate)->setChecked(true);refreshScreens();}
- else if(action==FR_MAXIMIZE||action==FR_RESTORE){if((m_consent->active()&&!m_consent->sharing())||action==FR_RESTORE)m_presentation->setActive(action==FR_MAXIMIZE);}
+
 }
-void MainWindow::maximize(){if(ui->share->isChecked()){if(!m_peer.ready()){log("请先连接平板，再放大接收端画面。","Connect the tablet before maximizing its received content.");return;}m_remoteMax=!m_remoteMax;m_peer.sendSession(m_remoteMax?FR_MAXIMIZE:FR_RESTORE);furinaSetMaximizeIcon(ui->maximize,m_remoteMax);log(m_remoteMax?"已请求平板全屏显示。":"已请求平板退出全屏。",m_remoteMax?"Requested full-screen viewing on the tablet.":"Requested leaving full-screen viewing on the tablet.");}else m_presentation->setActive(!m_presentation->active());}
+void MainWindow::maximize(){if(ui->share->isChecked()){if(!m_peer.ready()){log("请先连接平板，再放大接收端画面。","Connect the tablet before maximizing its received content.");return;}if(!m_consent->sharing())return;const bool requested=m_presentationSync->toggleRemote();log(requested?"已请求平板全屏显示。":"已请求平板退出全屏。",requested?"Requested full-screen viewing on the tablet.":"Requested leaving full-screen viewing on the tablet.");}else m_presentation->setActive(!m_presentation->active());}
 void MainWindow::preview(){if(m_castUi->locked())return;stop();{const QSignalBlocker a(ui->share),b(ui->receive);ui->share->setChecked(false);ui->receive->setChecked(true);}ui->modePanel->hide();m_view->setInteractive(true);configureAdb();if(m_adb.serial.isEmpty()){log("请先刷新 USB 设备码。","Refresh the USB device serial first.");return;}m_adbOnly=true;m_castUi->lockPending();m_castUi->occupy(false,false);m_preview.start();log("ADB 预览启动，每 500ms 请求一帧。","ADB preview started, requesting a frame every 500 ms.");}
 void MainWindow::gesture(fr_gesture g){if(!ui->receive->isChecked())return;if(!m_adbOnly){m_peer.sendGesture(g);return;}if(!m_deviceSize.isValid())return;auto x=[this](uint32_t n){return QString::number(qRound(n/65535.0*(m_deviceSize.width()-1)));};auto y=[this](uint32_t n){return QString::number(qRound(n/65535.0*(m_deviceSize.height()-1)));};const bool tap=qAbs(int(g.x1)-int(g.x2))<350&&qAbs(int(g.y1)-int(g.y2))<350&&g.duration_ms<450;if(tap)m_adb.run({"shell","input","tap",x(g.x1),y(g.y1)});else m_adb.run({"shell","input","swipe",x(g.x1),y(g.y1),x(g.x2),y(g.y2),QString::number(g.duration_ms)});}
 void MainWindow::key(quint32 k){if(m_adbOnly)m_adb.run({"shell","input","keyevent",QString::number(k)});else m_peer.sendKey(k);}
 void MainWindow::resizeEvent(QResizeEvent *event){QMainWindow::resizeEvent(event);if(!ui->bottomPanel)return;const bool landscape=width()>=height();ui->bottomLayout->setDirection(landscape?QBoxLayout::LeftToRight:QBoxLayout::TopToBottom);ui->bottomPanel->setMinimumHeight(landscape?220:310);ui->bottomPanel->setMaximumHeight(landscape?220:310);}
+
+void MainWindow::updateCursorMapping(){if(!m_cursorStream)return;const bool enabled=m_sharing&&m_independentCursor&&m_peer.cursorReady();m_cursorStream->setEnabled(enabled);m_videoSender.setSeparateCursor(enabled&&m_cursorStream->hasShape());}

@@ -9,6 +9,9 @@ import android.content.res.Configuration;
 import android.media.projection.MediaProjectionManager;
 import android.media.projection.MediaProjectionConfig;
 import android.provider.Settings;
+import android.view.KeyEvent;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import org.qtproject.qt.android.bindings.QtActivity;
 
 public class FurinaActivity extends QtActivity {
@@ -17,6 +20,7 @@ public class FurinaActivity extends QtActivity {
     private boolean extensionOrientationLocked;
     private int previousRequestedOrientation;
     private static final int CAPTURE_REQUEST = 8301;
+    private OnBackInvokedCallback backCallback;
     public static native boolean nativeWantFrame();
     public static native void nativeFrame(byte[] jpeg);
     public static native void nativeStatus(String text);
@@ -25,10 +29,34 @@ public class FurinaActivity extends QtActivity {
     public static native void nativeVideoStats(boolean sender,double fps,double workMs,int queueMs,double displayedFps,int width,int height,long elapsedMs);
     public static native void nativeNeedKey();
     public static native void nativeExitFullscreen();
+    public static native boolean nativeBackRequested();
+    public static native void nativeSessionStop();
     public static FurinaActivity currentActivity(){return current;}
 
-    @Override public void onCreate(Bundle state) { super.onCreate(state); current = this; }
-    @Override public void onDestroy() { if (current == this) { VideoCore.releaseActivity(); current = null; } super.onDestroy(); }
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state); current = this;
+        if(Build.VERSION.SDK_INT>=33){backCallback=this::handleBack;getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT,backCallback);}
+    }
+    private void handleBack(){if(!nativeBackRequested())moveTaskToBack(true);}
+    @Override public void onBackPressed(){handleBack();}
+    @Override public boolean dispatchKeyEvent(KeyEvent event){
+        if(event.getKeyCode()==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)handleBack();return true;}
+        return super.dispatchKeyEvent(event);
+    }
+    public static void backgroundTask(){final FurinaActivity a=current;if(a!=null)a.runOnUiThread(()->a.moveTaskToBack(true));}
+    public static void keepSession(boolean active){
+        final FurinaActivity a=current;if(a==null)return;
+        a.runOnUiThread(()->{
+            Intent service=new Intent(a,SessionService.class);
+            try{if(active)a.startForegroundService(service);else a.stopService(service);}
+            catch(Exception e){nativeStatus("投屏后台服务失败："+e+"\nEN: Casting background service failed: "+e);}
+        });
+    }
+    @Override public void onDestroy() {
+        if(Build.VERSION.SDK_INT>=33&&backCallback!=null)getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);
+        if (current == this) { VideoCore.releaseActivity(); current = null; }
+        super.onDestroy();
+    }
     public static String deviceCode() {
         final FurinaActivity a=current;
         if(a==null)return "";

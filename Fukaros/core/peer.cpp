@@ -5,13 +5,14 @@
 #include <QImageReader>
 #include <QNetworkProxy>
 #include "video_policy.h"
-Peer::Peer(QObject *p):QObject(p){
+Peer::Peer(QObject *p):QObject(p),m_cursor(this){
+ m_cursor.availability=[this](bool ready){emit cursorConnection(ready);};m_cursor.packet=[this](const QByteArray &p){emit cursor(p);};
  // Device transport is direct TCP over USB forwarding or the local network.
  m_server.setProxy(QNetworkProxy::NoProxy);
  connect(&m_server,&QTcpServer::newConnection,this,[this]{
   while(m_server.hasPendingConnections()){
    auto *s=m_server.nextPendingConnection();
-   if(m_socket){s->abort();s->deleteLater();continue;}
+   if(m_socket){if(m_ready)m_cursor.accept(s);else{s->abort();s->deleteLater();}continue;}
    attach(s,true);
   }
  });
@@ -42,7 +43,7 @@ void Peer::connectTo(const QString &host,quint16 port,const QString &token,const
  attach(s,false);s->connectToHost(host,port);
 }
 void Peer::close(bool graceful){
- m_server.close();m_tick.stop();
+ m_cursor.close();m_server.close();m_tick.stop();
  const bool drain=graceful&&m_ready&&m_socket&&m_socket->state()==QAbstractSocket::ConnectedState;
  // TCP orders this ping after cancellation. Its pong acknowledges that the
  // remote endpoint processed the stop, rather than just accepting TCP bytes.
@@ -77,22 +78,23 @@ void Peer::close(bool graceful){
  m_rx.clear();m_challenge.clear();m_backlog.invalidate();m_waitVideoKey=false;m_pendingPings=0;
 }
 void Peer::attach(QTcpSocket *s,bool server){
- m_socket=s;m_serverSide=server;m_ready=false;m_pendingPings=0;m_rx.clear();m_session.start();m_lastRx.start();
+ s->setObjectName("furinaMain");m_socket=s;m_serverSide=server;m_ready=false;m_pendingPings=0;m_rx.clear();m_session.start();m_lastRx.start();
  s->setProxy(QNetworkProxy::NoProxy);
  s->setReadBufferSize(FR_MAX_PAYLOAD+FR_HEADER_SIZE);
- s->setSocketOption(QAbstractSocket::LowDelayOption,1);
+ if(s->state()==QAbstractSocket::ConnectedState)s->setSocketOption(QAbstractSocket::LowDelayOption,1);
+ connect(s,&QTcpSocket::connected,s,[s]{s->setSocketOption(QAbstractSocket::LowDelayOption,1);});
  connect(s,&QTcpSocket::bytesWritten,this,[this]{if(m_socket&&m_socket->bytesToWrite()==0)m_backlog.invalidate();});
  connect(s,&QTcpSocket::readyRead,this,&Peer::read);
  connect(s,&QTcpSocket::errorOccurred,this,[this,s](QAbstractSocket::SocketError error){
   if(m_socket!=s)return;
   // FIN may arrive with unread final control messages in the receive buffer.
   if(error==QAbstractSocket::RemoteHostClosedError){read();if(m_socket!=s)return;}
-  const auto reason=s->errorString();m_socket=nullptr;m_ready=false;m_tick.stop();m_rx.clear();m_challenge.clear();
+  const auto reason=s->errorString();m_cursor.close();m_socket=nullptr;m_ready=false;m_tick.stop();m_rx.clear();m_challenge.clear();
   s->disconnect(this);s->abort();s->deleteLater();emit disconnected();emit status(reason);
  });
  connect(s,&QTcpSocket::disconnected,this,[this,s]{
   if(m_socket==s)read();
-  if(m_socket==s){m_socket=nullptr;m_ready=false;m_tick.stop();m_rx.clear();emit disconnected();emit status(tr("Disconnected"));}s->deleteLater();
+  if(m_socket==s){m_cursor.close();m_socket=nullptr;m_ready=false;m_tick.stop();m_rx.clear();emit disconnected();emit status(tr("Disconnected"));}s->deleteLater();
  });
  if(server){
   m_challenge.resize(32);
@@ -125,13 +127,21 @@ void Peer::handle(quint8 t,const QByteArray &p){
    const auto expected=QMessageAuthenticationCode::hash(m_challenge,m_token.toUtf8(),QCryptographicHash::Sha256);
    unsigned diff=0;for(int i=0;i<32;++i)diff|=unsigned(uint8_t(p[i])^uint8_t(expected[i]));
    if(diff){fail(tr("Pairing code rejected"));return;}
-   m_ready=true;send(FR_READY);emit connected();emit status(tr("Paired"));return;
+   m_ready=true;startCursor();send(FR_READY);emit connected();emit status(tr("Paired"));return;
   }
-  if(!m_serverSide&&t==FR_READY&&p.isEmpty()&&m_challenge.size()==32){m_ready=true;emit connected();emit status(tr("Paired"));return;}
+  if(!m_serverSide&&t==FR_READY&&p.isEmpty()&&m_challenge.size()==32){m_ready=true;startCursor();emit connected();emit status(tr("Paired"));return;}
   fail(tr("Authentication required"));return;
  }
  switch(t){
  case FR_VIDEO:{fr_video_info info{};if(!fr_video_read(reinterpret_cast<const uint8_t*>(p.constData()),p.size(),&info)){fail("Invalid video packet");return;}emit video(p);break;}
+ case FR_CURSOR_PREFERENCE:{
+  if(p.size()!=12){fail("Invalid cursor preference");return;}auto d=reinterpret_cast<const uint8_t*>(p.constData());auto value=fr_get_u32(d);quint64 revision=(quint64(fr_get_u32(d+4))<<32)|fr_get_u32(d+8);if(value>1||revision>quint64(INT64_MAX)){fail("Invalid cursor preference");return;}emit cursorPreference(value!=0,revision);break;
+ }
+ case FR_POINTER_SPEED:{
+  if(p.size()!=12){fail("Invalid pointer speed");return;}const auto *data=reinterpret_cast<const uint8_t*>(p.constData());
+  const auto percent=fr_get_u32(data);const quint64 revision=(quint64(fr_get_u32(data+4))<<32)|fr_get_u32(data+8);
+  if(percent<25||percent>400||revision>quint64(0x7fffffffffffffffULL)){fail("Invalid pointer speed");return;}emit pointerSpeed(int(percent),revision);break;
+ }
  case FR_PROFILE:if(p.size()!=4||!fr_resolution_valid(fr_get_u32(reinterpret_cast<const uint8_t*>(p.constData())))){fail("Invalid video profile");return;}emit profile(int(fr_get_u32(reinterpret_cast<const uint8_t*>(p.constData()))));break;
  case FR_FEEDBACK:{if(p.size()!=16){fail("Invalid video feedback");return;}const auto *data=reinterpret_cast<const uint8_t*>(p.constData());auto fps=fr_get_u32(data),work=fr_get_u32(data+4),queue=fr_get_u32(data+8),display=fr_get_u32(data+12);if(fps>240000||work>10000000||queue>10000||display>240000){fail("Invalid video feedback");return;}emit feedback(fps/1000.0,work/1000.0,queue,display/1000.0);break;}
  case FR_FRAME:{
@@ -186,3 +196,11 @@ bool Peer::sendVideo(const QByteArray &packet){
 }
 void Peer::sendProfile(int edge){uint8_t p[4];if(m_ready&&fr_resolution_valid(edge)){fr_put_u32(p,edge);send(FR_PROFILE,QByteArray(reinterpret_cast<char*>(p),4));}}
 void Peer::sendFeedback(double fps,double workMs,unsigned queueMs,double displayedFps){if(!m_ready)return;uint8_t p[16];fr_put_u32(p,uint32_t(qBound(0.0,fps,240.0)*1000));fr_put_u32(p+4,uint32_t(qBound(0.0,workMs,10000.0)*1000));fr_put_u32(p+8,qMin(10000u,queueMs));fr_put_u32(p+12,uint32_t(qBound(0.0,displayedFps,240.0)*1000));send(FR_FEEDBACK,QByteArray(reinterpret_cast<char*>(p),16));}
+
+void Peer::sendPointerSpeed(int percent,quint64 revision){if(!m_ready||percent<25||percent>400||revision>quint64(0x7fffffffffffffffULL))return;uint8_t data[12];fr_put_u32(data,uint32_t(percent));fr_put_u32(data+4,uint32_t(revision>>32));fr_put_u32(data+8,uint32_t(revision));send(FR_POINTER_SPEED,QByteArray(reinterpret_cast<char*>(data),12));}
+
+void Peer::startCursor(){
+ const auto key=QMessageAuthenticationCode::hash(QByteArray("FURINA-CURSOR-1")+m_challenge,m_token.toUtf8(),QCryptographicHash::Sha256);
+ m_cursor.begin(key,m_serverSide,m_socket->peerAddress(),m_socket->peerPort(),m_socket->localAddress());
+}
+void Peer::sendCursorPreference(bool enabled,quint64 revision){if(!m_ready||revision>quint64(INT64_MAX))return;uint8_t p[12];fr_put_u32(p,enabled?1:0);fr_put_u32(p+4,revision>>32);fr_put_u32(p+8,uint32_t(revision));send(FR_CURSOR_PREFERENCE,QByteArray(reinterpret_cast<char*>(p),12));}

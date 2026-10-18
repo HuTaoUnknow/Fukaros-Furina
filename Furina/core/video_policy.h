@@ -9,6 +9,7 @@ extern "C" {
 #define FR_VIDEO_GOP (FR_TARGET_FPS*5)
 #define FR_VIDEO_HEADER 32
 #define FR_VIDEO_KEY 1u
+#define FR_VIDEO_CURSOR_SEPARATE 2u
 typedef struct { uint32_t flags,sequence,width,height,epoch; uint64_t pts_us; } fr_video_info;
 typedef struct { int selected,edge; uint32_t low_ms,stable_ms,retry_ms; } fr_video_policy;
 int fr_resolution_valid(uint32_t edge);

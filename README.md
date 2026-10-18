@@ -1,71 +1,45 @@
 # Fukaros + Furina
 
-Windows 电脑与 Android 手机 / 平板的 USB / Wi-Fi 投屏项目。
+Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前配套版本为 **v0.4.18**。
 
-当前配套发布为 **v0.4.14**：电脑端 **Fukaros 0.4.14**、移动端 **Furina 0.4.14**，双端统一版本号，并在同一发布页提供安装包。完整变化见 [更新记录](docs/CHANGELOG.md)，构建和实测范围见 [发布验证](docs/VALIDATION.md)。
+## 下载
 
-配对码、平板导航和远程控制使用普通背景；其余必填连接项用深绿色，可选 / 调试连接项用深黄色，并用分割线分开。复制自动使用主屏幕，扩展自动使用平板虚拟屏。每行末尾的“…”使用透明背景、半高按钮及上方竖向弹簧，双端均点击查看步骤、再次点击关闭；移动端设置内容支持手指上下滑动。扩展位置弹窗采用较小的提示和步骤字体。
+在 [v0.4.18 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.18) 下载并同时更新两端：
 
-- **Fukaros**：Windows 桌面端，分享电脑桌面或接收平板画面。
-- **Furina**：Android 移动端，接收电脑桌面或分享平板画面。
-- 同一时间只使用一个方向；对端点击“同意”后才开始采集与传输。
-- 投屏期间锁定方向、复制 / 扩展和连接设置，清晰度可实时调整。发送端空闲画面区显示“占用中...”；点击停止后恢复选择，意外断线仍须先停止。
-- 设置分别提供 USB 有线和 Wi-Fi 无线参数页，配对码共用。
-- 两端使用一个圆形状态按钮：开始 ▶、等待转圈、连接后停止 ‖。等待时点击可取消，连接后点击可结束连接与投屏。
-- 两端用分割线分开方向、复制 / 扩展和清晰度，选择区不显示说明文字；状态和性能详情保留在调试区。
-- 电脑端保留系统标题栏，关闭主窗口后进入托盘，继续保持连接和投屏。单击 / 双击托盘或选择“打开 Fukaros”恢复窗口，托盘菜单“退出 Fukaros”结束应用。
-- 应用图标采用用户提供的原图：电脑端一根呆毛，移动端三根呆毛，分别用于窗口 / 托盘 / 快捷方式和 Android 启动器。
-- 电脑分享支持 **复制 / 扩展**。扩展通过 Windows 虚拟显示驱动创建独立桌面，窗口可拖到平板对应的屏幕。
-- 分辨率支持 **1920 / 1080 / 720 / 自动**，数字为最长边像素。默认自动，以 60 FPS 为目标，并过滤短时波动。
-- 移动端竖屏时，投屏画面置顶，下方为开始 / 停止、设置和放大按钮；“投屏模式 / 调试信息”复选项切换对应内容，横屏保留原布局。
-- 扩展方向以移动端接收时的横竖屏为准：竖屏桌面 1200×1920，横屏桌面 1920×1200，虚拟屏模式均为 60 Hz。扩展开始后锁定方向，点击停止或收到对端停止后恢复旋转。
-- 双端调试信息保留时间戳和中英双语；中文行的参数名称、帧率、耗时和单位使用中文。
-- 支持远程点击、滑动、长按及 Android 返回 / 主页 / 最近任务。
-- `.ui` 可在 Qt Creator Designer 编辑；协议、传输、编解码、会话确认、分辨率策略等核心代码放在各项目的 `core/`。
+- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.18/Fukaros-0.4.18-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
+- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.18/Furina-0.4.18-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
+- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.18.md)。当前仍为预览版本；详细测试范围见 [发布验证](docs/VALIDATION.md)。
 
-## 下载与安装
+## 功能
 
-在 [v0.4.14 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.14) 下载配套的两端安装包；两端版本号统一为 0.4.14，请配套更新：
+- **电脑 → 手机 / 平板**：复制主屏，或创建独立的 Windows 扩展桌面，支持记住扩展屏位置。
+- **手机 / 平板 → 电脑**：显示 Android 画面；开启无障碍服务和远程控制后，支持点击、滑动、长按与导航按键。
+- **有线与无线**：支持 USB 网络共享、USB ADB 兼容模式及局域网 Wi-Fi；同一时间只使用一个投屏方向，须由对端同意。
+- **画质与方向**：1920 / 1080 / 720 / 自动档，数字为最长边像素，目标 60 FPS。竖屏扩展为 1200×1920，横屏为 1920×1200；扩展期间锁定方向，停止后恢复旋转。
+- **独立鼠标**：默认开启，鼠标位置与图案通过独立认证通道传输；可切回视频合成模式。副屏鼠标速率可设为主屏的 0.25–4 倍，双端同步，主屏系统速率保持不变。
+- **会话同步**：双端停止同步释放会话；停止后移除虚拟扩展屏。放大 / 还原由接收端回传状态确认，按钮跟随实际状态。
+- **日常使用**：电脑端单实例、关闭到托盘；移动端提供横竖屏布局，支持系统返回退出全屏、回到桌面后恢复投屏。调试信息按时间戳显示中英双语。
 
-- [Fukaros-0.4.14-windows-x64-setup.exe](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.14/Fukaros-0.4.14-windows-x64-setup.exe)：Windows 10 / 11 x64 安装程序，包含 Qt、FFmpeg、独立 ADB 和扩展屏驱动文件。新电脑无需安装 Qt、Qt Creator 或联想模拟器，有快捷方式和卸载入口。
-- [Furina-0.4.14-android-arm64.apk](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.14/Furina-0.4.14-android-arm64.apk)：Android 9 及以上 ARM64 APK。保留 `com.furina.black` 的包标识，名称显示为 Furina，预览包沿用既有测试签名以支持覆盖安装。
-- `SHA256SUMS.txt`：安装包校验值。
-- `UPDATE-0.4.14.md`：本次更新说明和使用步骤。
+## 快速开始
 
-## 使用
+1. 安装两端，在设置中填写相同的配对码（至少 6 位），移动端按开始。
+2. 选择连接方式：**Wi-Fi** 需要两端处于可互访的局域网，电脑填写移动端 IPv4 地址；**USB 网络**需要先在移动端系统设置中开启“USB 网络共享”，电脑选择“USB 网络（无需调试）”，USB IP 留空可自动发现；**ADB 兼容模式**需要开启并授权 USB 调试。单纯插入数据线或仅充电不能建立投屏连接。
+3. 电脑选择分享或获取屏幕，分享时再选择复制 / 扩展，按开始并由对端同意。分享 Android 屏幕还需系统录屏授权。
+4. 首次扩展按提示配置 Windows 屏幕位置，之后可继承或重新配置。需要竖屏扩展时，先让移动端处于竖屏，再发起连接。
+5. 投屏期间可调整清晰度和通用鼠标设置；更改方向或连接方式前先停止。安卓全屏时用系统边缘返回手势或返回键还原，普通界面返回桌面后保留会话。
 
-1. 两端设置相同的配对码（至少 6 位）。
-2. **USB（无需调试，0.4.7 起）**：连接数据线，平板在系统设置中开启“USB 网络共享”；Furina 的 USB 页可打开系统设置、刷新 USB IP，返回后按开始。Fukaros 设置选择“USB 有线 → USB 网络（无需调试）”，USB 平板 IP 留空自动发现，两端配对码保持一致。电脑按开始，由对端同意。无需 USB 调试或无线网络；系统不支持 USB 网络共享时可选 ADB 兼容模式。
-3. **Wi-Fi**：两端在相互可达的局域网；Furina 的监听地址保留 `0.0.0.0` 并按开始，Fukaros 设置打开“Wi-Fi 无线”页，填平板实际 IPv4 地址并保存。
-4. 在 Fukaros 选分享电脑屏幕或获取平板屏幕，按开始；调试区显示等待对端同意。对端点击同意后投屏，拒绝或 30 秒超时会取消请求。
-5. 分享平板屏幕还需要 Android 系统录屏授权；远程触控需要开启 Furina 无障碍服务和应用内允许控制选项。
-6. 电脑分享选择复制或扩展；首次扩展会请求管理员权限安装签名驱动。首次扩展在虚拟屏就绪后自动打开 Windows 显示设置；拖动屏幕并应用，返回点击“完成并记住位置”后投屏。以后连接选择“继承之前屏幕位置”或“重新配置屏幕位置”。投屏中布局变化会自动重建采集，停止后收起虚拟屏。
-7. 需要竖屏扩展时，先将 Furina 转为竖屏，再发起或同意扩展；扩展期间锁定横竖屏，需点击停止后再改变方向。
-8. 等待确认和投屏期间方向及复制 / 扩展不可切换。投屏中使用主界面分辨率按钮调整清晰度；需要更改方式或连接参数时先点击停止。对端点击停止也会结束会话并解锁。
-9. 移动端放大后使用系统屏幕边缘返回手势或返回键退出全屏，投屏继续播放；画面中央的普通左滑不会退出。全屏画面不显示额外退出按钮。
-
-Furina 的两个设置页分别展示 USB IP / 系统共享入口和 Wi-Fi 监听地址；USB 页启动时监听所有 IPv4 接口，Wi-Fi 页保留自定义监听地址。配对码在两种传输间共用。USB IP 可在开启网络共享后刷新；USB 设备码仅用于标识，ADB 兼容模式使用电脑下方的 ADB 序列号。
-
-端口为 TCP `27183`，自动发现使用 UDP `27184`。USB 网络模式只探测 Windows 的 USB Ethernet / RNDIS / NCM 接口，并把投屏 TCP 连接绑定到该 USB IPv4 地址，找不到 USB 网卡时不会改用 Wi-Fi。IP 留空时先向 USB 网关和定向广播发送带随机 nonce 的发现报文，发现多个目标时要求指定 USB IP；手填 IP 也必须位于 USB 网段。探测不发送配对码，正式连接沿用挑战认证和对端同意流程。USB ADB 兼容模式仍使用 `adb forward`，Wi-Fi 使用局域网 TCP；各模式共用 H.264 / 60 FPS 目标管线。访客网络 / AP 隔离可能阻止 Wi-Fi 互访。
+设置分为 USB 和 Wi-Fi 参数页；“…”按钮提供操作步骤。电脑端关闭窗口会进入托盘，彻底退出请使用托盘菜单。
 
 ## 项目结构
 
 ```text
-Fukaros/                 Windows 桌面端，独立 CMake 项目
-  core/                  C 协议、Qt 传输、DXGI / 编解码、虚拟显示驱动
-  tests/                 界面与显示源回归测试
-  packaging/             Windows 安装包定义及版本资源
-  mainwindow.ui          主界面（Qt Designer）
-  settings.ui            设置界面（Qt Designer）
-Furina/                  Android 移动端，独立 CMake 项目
-  core/android/          MediaProjection、MediaCodec、GPU 采样、无障碍控制
-  android/               AndroidManifest、Activity、资源和 Gradle Wrapper
-  core/                  C 协议、Qt 传输、JNI 和会话逻辑
-  tests/                 桌面模拟回归测试
-docs/                    发布验证与第三方组件信息
+Fukaros/       Windows 端：Qt Widgets UI、虚拟显示、采集与编码
+Furina/        Android 端：Qt UI、系统录屏、硬件解码与触控
+  core/       各端的协议、连接、会话、鼠标和视频核心逻辑
+docs/          更新记录、验证与第三方组件信息
 ```
 
-两个目录在同一个仓库中，各自可以单独用 Qt Creator 打开 `CMakeLists.txt`。
+两个项目可分别用 Qt Creator 打开 `CMakeLists.txt`；`.ui` 文件可在 Qt Designer 中编辑。代码使用 C11、C++17，Android 平台接口使用 Java / JNI。历史变化见 [更新记录](docs/CHANGELOG.md)。
 
 ## 编译
 
@@ -96,7 +70,7 @@ pwsh -File .\Furina\build-android.ps1 -QtRoot C:\Qt -Sdk C:\Android\Sdk -Ndk C:\
 
 ## 运行逻辑与边界
 
-Windows 使用 DXGI、GPU 缩放、NVENC H.264；没有可用 NVIDIA 编码器时回退至 Media Foundation。Windows 接收侧使用 FFmpeg / D3D11VA；Android 使用 MediaProjection、GPU 60 Hz 采样、MediaCodec Surface 编解码。
+Windows 独立鼠标模式使用 WGC 采集并排除光标，兼容模式使用 DXGI；视频通过 GPU 缩放和 NVENC H.264 编码；没有可用 NVIDIA 编码器时回退至 Media Foundation。Windows 接收侧使用 FFmpeg / D3D11VA；Android 使用 MediaProjection、GPU 60 Hz 采样、MediaCodec Surface 编解码。
 
 自动分辨率从 1080 开始，以实际编码、接收和显示帧率中的较低值评估：达到 59 FPS 及以上连续 5 秒，按 1080 → 1440 → 1920 逐档试探，1920 为目前最高档。只有低于 50 FPS 连续累计 5 秒才下降一档，恢复到 50 FPS 会清除降档计时。降档后至少观察 10 秒再尝试升档，恢复后可继续探测高档位；编码耗时或队列波动不会单独触发降档。关键帧和 QP 策略尽量降低画质突变。目标 60 FPS，实际帧率受硬件、Wi-Fi 和分辨率影响，不保证所有环境恒定 60 FPS。
 

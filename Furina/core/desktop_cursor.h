@@ -24,7 +24,7 @@ class DesktopCursor {
  CursorCom<ID3D11BlendState> alphaBlend;
  ID3D11Texture2D *target=nullptr;
  unsigned type=0;int width=0,height=0,x=0,y=0;bool visible=false;
- std::vector<uint8_t> pixels,raw;
+ std::vector<uint8_t> pixels,raw;bool shapeDirty=false;
  bool initialize(ID3D11Device *device){
   if(ps.p&&constants.p&&raster.p&&alphaBlend.p)return true;
   const char *shader=R"(
@@ -59,6 +59,8 @@ float4 pixel(float4 pos:SV_POSITION):SV_TARGET {
   return SUCCEEDED(device->CreateBuffer(&bd,nullptr,constants.put()))&&SUCCEEDED(device->CreateRasterizerState(&rd,raster.put()))&&SUCCEEDED(device->CreateBlendState(&blend,alphaBlend.put()));
  }
 public:
+ bool separateVisible()const{return visible;}
+ std::vector<uint8_t> takeShape(){if(!shapeDirty)return {};shapeDirty=false;std::vector<uint8_t> p(16+pixels.size());auto put=[&](int offset,unsigned value){p[offset]=uint8_t(value>>24);p[offset+1]=uint8_t(value>>16);p[offset+2]=uint8_t(value>>8);p[offset+3]=uint8_t(value);};put(0,2);put(4,type);put(8,width);put(12,height);memcpy(p.data()+16,pixels.data(),pixels.size());return p;}
  void setPosition(int px,int py,bool show){x=px;y=py;visible=show;}
  bool setShape(ID3D11Device *device,unsigned kind,unsigned w,unsigned h,unsigned pitch,const uint8_t *data,size_t size){
   const unsigned rows=kind==FR_CURSOR_MONO?h/2:h;
@@ -70,7 +72,7 @@ public:
   D3D11_SUBRESOURCE_DATA initial{next.data(),w*4,0};
   shapeView.clear();texture.clear();
   if(FAILED(device->CreateTexture2D(&desc,&initial,texture.put()))||FAILED(device->CreateShaderResourceView(texture.p,nullptr,shapeView.put())))return false;
-  pixels.swap(next);type=kind;width=w;height=rows;return true;
+  pixels.swap(next);type=kind;width=w;height=rows;shapeDirty=true;return true;
  }
  bool update(ID3D11Device *device,IDXGIOutputDuplication *dup,const DXGI_OUTDUPL_FRAME_INFO &info){
   if(info.LastMouseUpdateTime.QuadPart)setPosition(info.PointerPosition.Position.x,info.PointerPosition.Position.y,info.PointerPosition.Visible);

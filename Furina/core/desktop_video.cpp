@@ -5,6 +5,7 @@
 #include <QLibrary>
 #include <QElapsedTimer>
 #include <QBuffer>
+#include <QTransform>
 #include <chrono>
 #include <vector>
 #ifdef Q_OS_WIN
@@ -13,6 +14,8 @@
 #include <dxgi1_2.h>
 #include <mmsystem.h>
 #include "desktop_cursor.h"
+#include "desktop_transform.h"
+#include "desktop_wgc.h"
 #include "vendor/nvcodec/nvEncodeAPI.h"
 extern "C" {
 #include "vendor/ffmpeg/libavcodec/avcodec.h"
@@ -55,10 +58,15 @@ class Capture {
  Com<ID3D11VideoProcessorInputView> inputView;Com<ID3D11VideoProcessorOutputView> outputView;
  int sourceW=0,sourceH=0,scaledW=0,scaledH=0;
  QImage latest;
- DesktopCursor cursor;
- QImage cpuFrame(){if(latest.isNull())return {};QImage frame=latest.copy();cursor.drawCpu(frame.bits(),frame.width(),frame.height(),frame.bytesPerLine());return frame;}
+ bool separateRequested=false,usingWgc=false,wgcBlocked=false;HMONITOR monitor=nullptr;unsigned activeTurns=0;FurinaWgc::Capture wgc;
+ DesktopCursor cursor;DesktopTransform transform;unsigned turns=0;
+ QImage cpuFrame(){if(latest.isNull())return {};QImage frame=activeTurns?latest.transformed(QTransform().rotate(90*activeTurns)):latest.copy();if(!separateCursor())cursor.drawCpu(frame.bits(),frame.width(),frame.height(),frame.bytesPerLine());return frame;}
 public:
  QString error;
+ void setSeparateCursor(bool value){separateRequested=value;}
+ bool separateCursor()const{return usingWgc||(separateRequested&&cursor.separateVisible());}
+ QString backend()const{return usingWgc?"WGC":"DXGI";}
+ QByteArray takeCursorShape(){auto data=cursor.takeShape();return QByteArray(reinterpret_cast<const char*>(data.data()),data.size());}
  bool recoverable=false;
  ID3D11Device *gpuDevice()const{return device.p;}
  QSize sourceSize()const{return QSize(sourceW,sourceH);}
@@ -69,20 +77,21 @@ public:
     DXGI_OUTPUT_DESC desc{};if(FAILED(output->GetDesc(&desc)))continue;if(!desc.AttachedToDesktop||QString::fromWCharArray(desc.DeviceName)!=name)continue;
     if(FAILED(D3D11CreateDevice(adapter.p,D3D_DRIVER_TYPE_UNKNOWN,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,device.put(),nullptr,context.put()))){error="D3D11 device";return false;}
     Com<IDXGIOutput1> modern;if(FAILED(output->QueryInterface(__uuidof(IDXGIOutput1),reinterpret_cast<void**>(modern.put())))){error="DXGI output";return false;}
-    const auto hr=modern->DuplicateOutput(device.p,duplicate.put());if(FAILED(hr)){error=QString("DuplicateOutput HRESULT %1").arg(quint32(hr),8,16,QChar('0'));return false;}DXGI_OUTDUPL_DESC d{};duplicate->GetDesc(&d);sourceW=d.ModeDesc.Width;sourceH=d.ModeDesc.Height;return true;
+    const auto hr=modern->DuplicateOutput(device.p,duplicate.put());if(FAILED(hr)){error=QString("DuplicateOutput HRESULT %1").arg(quint32(hr),8,16,QChar('0'));return false;}DXGI_OUTDUPL_DESC d{};duplicate->GetDesc(&d);sourceW=desc.DesktopCoordinates.right-desc.DesktopCoordinates.left;sourceH=desc.DesktopCoordinates.bottom-desc.DesktopCoordinates.top;turns=d.Rotation>=DXGI_MODE_ROTATION_ROTATE90?unsigned(d.Rotation-DXGI_MODE_ROTATION_IDENTITY):0;monitor=desc.Monitor;return true;
    }
   }error="Display not found: "+name;return false;
  }
  ID3D11Texture2D *gpuFrame(int w,int h){
-  DXGI_OUTDUPL_FRAME_INFO info{};Com<IDXGIResource> resource;auto hr=duplicate->AcquireNextFrame(0,&info,resource.put());
-  if(SUCCEEDED(hr)){
-   const bool pointerOk=cursor.update(device.p,duplicate.p,info);
-   Com<ID3D11Texture2D> texture;resource->QueryInterface(__uuidof(ID3D11Texture2D),reinterpret_cast<void**>(texture.put()));
-   if(texture){D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);if(!sourceTexture){desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;desc.MiscFlags=0;desc.CPUAccessFlags=0;device->CreateTexture2D(&desc,nullptr,sourceTexture.put());}if(sourceTexture)context->CopyResource(sourceTexture.p,texture.p);}
-   duplicate->ReleaseFrame();
-   if(!pointerOk){recoverable=true;error="DXGI pointer shape changed during capture";return nullptr;}
-  }else if(hr!=DXGI_ERROR_WAIT_TIMEOUT){recoverable=hr==DXGI_ERROR_ACCESS_LOST||hr==DXGI_ERROR_DEVICE_REMOVED||hr==DXGI_ERROR_DEVICE_RESET;error=QString("DXGI capture HRESULT %1").arg(quint32(hr),8,16,QChar('0'));return nullptr;}
-  if(!sourceTexture)return nullptr;
+  if(!acquire())return nullptr;
+  if(activeTurns){
+   if(scaledW!=w||scaledH!=h){
+    D3D11_TEXTURE2D_DESC desc{};desc.Width=w;desc.Height=h;desc.MipLevels=1;desc.ArraySize=1;desc.Format=DXGI_FORMAT_B8G8R8A8_UNORM;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    if(FAILED(device->CreateTexture2D(&desc,nullptr,scaledTexture.put()))){error="GPU portrait texture failed";return nullptr;}scaledW=w;scaledH=h;
+   }
+   if(!transform.draw(device.p,context.p,sourceTexture.p,scaledTexture.p,w,h,activeTurns)){error="GPU portrait rotation failed";return nullptr;}
+   if(!separateCursor()&&!cursor.draw(device.p,context.p,scaledTexture.p,sourceW,sourceH,w,h)){error="GPU cursor composition failed";return nullptr;}
+   context->Flush();return scaledTexture.p;
+  }
   if(scaledW!=w||scaledH!=h){
    outputView.clear();inputView.clear();processor.clear();enumerator.clear();scaledTexture.clear();
    device->QueryInterface(__uuidof(ID3D11VideoDevice),reinterpret_cast<void**>(videoDevice.put()));context->QueryInterface(__uuidof(ID3D11VideoContext),reinterpret_cast<void**>(videoContext.put()));if(!videoDevice||!videoContext){error="GPU video processor unavailable";return nullptr;}
@@ -98,26 +107,40 @@ public:
   }
   D3D11_VIDEO_PROCESSOR_STREAM stream{};stream.Enable=TRUE;stream.pInputSurface=inputView.p;
   if(FAILED(videoContext->VideoProcessorBlt(processor.p,outputView.p,0,1,&stream))){error="GPU scaling failed";return nullptr;}
-  if(!cursor.draw(device.p,context.p,scaledTexture.p,sourceW,sourceH,w,h)){error="GPU cursor composition failed";return nullptr;}
+  if(!separateCursor()&&!cursor.draw(device.p,context.p,scaledTexture.p,sourceW,sourceH,w,h)){error="GPU cursor composition failed";return nullptr;}
   context->Flush();return scaledTexture.p;
  }
  QImage grab(){
-  DXGI_OUTDUPL_FRAME_INFO info{};Com<IDXGIResource> resource;const auto hr=duplicate->AcquireNextFrame(0,&info,resource.put());
-  if(hr==DXGI_ERROR_WAIT_TIMEOUT)return cpuFrame();
-  if(FAILED(hr)){recoverable=hr==DXGI_ERROR_ACCESS_LOST||hr==DXGI_ERROR_DEVICE_REMOVED||hr==DXGI_ERROR_DEVICE_RESET;error=QString("Desktop capture HRESULT %1").arg(quint32(hr),8,16,QChar('0'));return {};}
-  if(!cursor.update(device.p,duplicate.p,info)){duplicate->ReleaseFrame();recoverable=true;error="DXGI pointer shape changed during capture";return {};}
-  Com<ID3D11Texture2D> texture;resource->QueryInterface(__uuidof(ID3D11Texture2D),reinterpret_cast<void**>(texture.put()));
-  if(texture){D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
-   if(!staging){desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.MiscFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;device->CreateTexture2D(&desc,nullptr,staging.put());}
-   if(staging){context->CopyResource(staging.p,texture.p);D3D11_MAPPED_SUBRESOURCE mapped{};
-    if(SUCCEEDED(context->Map(staging.p,0,D3D11_MAP_READ,0,&mapped))){
-     if(latest.size()!=QSize(desc.Width,desc.Height))latest=QImage(desc.Width,desc.Height,QImage::Format_RGB32);
-     for(int y=0;y<latest.height();++y)memcpy(latest.scanLine(y),static_cast<const char*>(mapped.pData)+y*mapped.RowPitch,latest.width()*4);
-     context->Unmap(staging.p,0);
-    }
+  if(!acquire())return {};if(!sourceTexture)return {};
+  D3D11_TEXTURE2D_DESC desc{};sourceTexture->GetDesc(&desc);
+  if(!staging){desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;desc.BindFlags=0;desc.MiscFlags=0;device->CreateTexture2D(&desc,nullptr,staging.put());}
+  if(staging){context->CopyResource(staging.p,sourceTexture.p);D3D11_MAPPED_SUBRESOURCE mapped{};
+   if(SUCCEEDED(context->Map(staging.p,0,D3D11_MAP_READ,0,&mapped))){
+    latest=QImage(int(desc.Width),int(desc.Height),QImage::Format_RGB32);for(int y=0;y<latest.height();++y)memcpy(latest.scanLine(y),static_cast<const char*>(mapped.pData)+y*mapped.RowPitch,latest.width()*4);context->Unmap(staging.p,0);
    }
-  }duplicate->ReleaseFrame();return cpuFrame();
+  }return cpuFrame();
  }
+private:
+ bool acquire(){
+  bool requested=separateRequested&&!wgcBlocked;if(requested&&!wgc.opened()&&!wgc.open(device.p,monitor)){wgcBlocked=true;requested=false;}
+  if(requested!=usingWgc){
+   outputView.clear();inputView.clear();processor.clear();enumerator.clear();scaledTexture.clear();sourceTexture.clear();staging.clear();latest={};scaledW=scaledH=0;
+   usingWgc=requested;if(!requested)wgc.close();
+  }
+  activeTurns=usingWgc?0:turns;Com<ID3D11Texture2D> texture;
+  if(usingWgc){
+   if(!wgc.next(device.p,context.p,texture.put())){recoverable=true;error=wgc.error;return false;}
+   if(texture){sourceTexture.clear();sourceTexture.p=texture.p;texture.p=nullptr;}return bool(sourceTexture);
+  }
+  DXGI_OUTDUPL_FRAME_INFO info{};Com<IDXGIResource> resource;auto hr=duplicate->AcquireNextFrame(0,&info,resource.put());
+  if(SUCCEEDED(hr)){
+   bool pointerOk=cursor.update(device.p,duplicate.p,info);resource->QueryInterface(__uuidof(ID3D11Texture2D),reinterpret_cast<void**>(texture.put()));
+   if(texture){D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);if(!sourceTexture){desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;desc.MiscFlags=0;desc.CPUAccessFlags=0;device->CreateTexture2D(&desc,nullptr,sourceTexture.put());}if(sourceTexture)context->CopyResource(sourceTexture.p,texture.p);}
+   duplicate->ReleaseFrame();if(!pointerOk){recoverable=true;error="DXGI pointer shape changed during capture";return false;}
+  }else if(hr!=DXGI_ERROR_WAIT_TIMEOUT){recoverable=hr==DXGI_ERROR_ACCESS_LOST||hr==DXGI_ERROR_DEVICE_REMOVED||hr==DXGI_ERROR_DEVICE_RESET;error=QString("DXGI capture HRESULT %1").arg(quint32(hr),8,16,QChar('0'));return false;}
+  return bool(sourceTexture);
+ }
+
 };
 class NvEncoder {
  QLibrary library;NV_ENCODE_API_FUNCTION_LIST functions{};void *encoder=nullptr;NV_ENC_REGISTERED_PTR registered=nullptr;NV_ENC_OUTPUT_PTR output=nullptr;ID3D11Texture2D *input=nullptr;int width=0,height=0;uint64_t sequence=0;
@@ -199,7 +222,7 @@ struct Decoder {
  void clear(){auto &a=api();if(scaler)a.sws_freeContext(scaler);scaler=nullptr;if(frame)a.av_frame_free(&frame);if(cpu)a.av_frame_free(&cpu);if(packet)a.av_packet_free(&packet);if(codec)a.avcodec_free_context(&codec);}
  static AVPixelFormat format(AVCodecContext*,const AVPixelFormat *formats){for(auto p=formats;*p!=AV_PIX_FMT_NONE;++p)if(*p==AV_PIX_FMT_D3D11)return *p;return formats[0];}
  bool open(){
-  clear();auto &a=api();const auto *decoder=a.avcodec_find_decoder_by_name("h264");if(!decoder){error="H.264 decoder unavailable";return false;}codec=a.avcodec_alloc_context3(decoder);codec->thread_count=2;codec->flags|=AV_CODEC_FLAG_LOW_DELAY;
+  clear();auto &a=api();const auto *decoder=a.avcodec_find_decoder_by_name("h264");if(!decoder){error="H.264 decoder unavailable";return false;}codec=a.avcodec_alloc_context3(decoder);codec->thread_count=2;codec->thread_type=FF_THREAD_SLICE;codec->flags|=AV_CODEC_FLAG_LOW_DELAY;
   if(!device)a.av_hwdevice_ctx_create(&device,AV_HWDEVICE_TYPE_D3D11VA,nullptr,nullptr,0);hardware=device!=nullptr;if(hardware){codec->hw_device_ctx=a.av_buffer_ref(device);codec->get_format=&format;}
   const int result=a.avcodec_open2(codec,decoder,nullptr);if(result<0){error=a.error(result);clear();return false;}
   frame=a.av_frame_alloc();cpu=a.av_frame_alloc();packet=a.av_packet_alloc();return true;
@@ -256,7 +279,7 @@ void DesktopVideoSender::run(){
     if(!announced){emit status(furinaStatus("显示器暂不可用，正在等待显示配置稳定。","Display temporarily unavailable. Waiting for the configuration to settle."));announced=true;}
     QThread::msleep(100);continue;
    }
-   Encoder encoder;NvEncoder nv;bool native=true,retry=false;int currentEdge=0,w=0,h=0,frames=0;uint32_t epoch=0;double work=0;
+   Encoder encoder;NvEncoder nv;bool native=true,retry=false,currentMapping=false;int currentEdge=0,w=0,h=0,frames=0;uint32_t epoch=0;double work=0;
    QElapsedTimer sample;sample.start();qint64 due=clock.nsecsElapsed();
    while(!m_stop){
     if(m_refresh.exchange(false)){retry=true;break;}
@@ -264,6 +287,8 @@ void DesktopVideoSender::run(){
     const auto now=clock.nsecsElapsed();if(now<due){QThread::usleep(qMin<qint64>((due-now)/1000,2000));continue;}due+=1000000000LL/60;if(now-due>1000000000LL/60)due=now+1000000000LL/60;
     if(m_resolution!=policy.selected)fr_video_policy_init(&policy,m_resolution);
     if(m_pending)continue;
+    const bool mapping=m_separateCursor.load();if(mapping!=currentMapping){currentMapping=mapping;currentEdge=0;}
+    capture.setSeparateCursor(mapping);
     QElapsedTimer processing;processing.start();std::vector<QByteArray> output;std::vector<bool> keys;
     if(policy.edge!=currentEdge){
      nv.clear();encoder.clear();fr_video_dimensions(capture.sourceSize().width(),capture.sourceSize().height(),policy.edge,&w,&h);
@@ -272,7 +297,7 @@ void DesktopVideoSender::run(){
      if(native&&!nv.open(capture.gpuDevice(),texture,w,h)){native=false;emit status(furinaStatus("NVENC 不可用，切换 Media Foundation："+nv.error,"NVENC unavailable; switching to Media Foundation: "+nv.error));}
      if(!native&&!encoder.open(w,h)){emit status(furinaStatus("硬件编码启动失败："+encoder.error,"Hardware encoder could not start: "+encoder.error));fatal=true;break;}
      currentEdge=policy.edge;epoch=++m_epoch;if(!epoch)epoch=++m_epoch;m_key=true;
-     emit status(furinaStatus(QString("DXGI + %1，%2×%3，目标 60 FPS").arg(native?"GPU 缩放 + NVENC":"Media Foundation").arg(w).arg(h),QString("DXGI + %1, %2x%3, target 60 FPS").arg(native?"GPU scaling + NVENC":"Media Foundation").arg(w).arg(h)));
+     emit status(furinaStatus(QString("%1 + %2，%3×%4，目标 60 FPS").arg(capture.backend()).arg(native?"GPU 缩放 + NVENC":"Media Foundation").arg(w).arg(h),QString("%1 + %2, %3x%4, target 60 FPS").arg(capture.backend()).arg(native?"GPU scaling + NVENC":"Media Foundation").arg(w).arg(h)));
     }
     if(native){
      if(!capture.gpuFrame(w,h)){
@@ -285,9 +310,10 @@ void DesktopVideoSender::run(){
      auto image=capture.grab();if(image.isNull()){if(capture.error.isEmpty())continue;if(capture.recoverable){retry=true;break;}emit status(furinaStatus("采集停止："+capture.error,"Capture stopped: "+capture.error));fatal=true;break;}
      if(!encoder.encode(image,m_key.exchange(false),&output,&keys)){emit status(furinaStatus("编码失败："+encoder.error,"Encoding failed: "+encoder.error));fatal=true;break;}
     }
+    auto shape=capture.takeCursorShape();if(!shape.isEmpty())emit cursorShape(shape);
     work+=processing.nsecsElapsed()/1000000.0;
     for(size_t i=0;i<output.size();++i){if(output[i].isEmpty())continue;
-     fr_video_info info{keys[i]?FR_VIDEO_KEY:0u,++sequence,uint32_t(w),uint32_t(h),epoch,uint64_t(clock.nsecsElapsed()/1000)};
+     fr_video_info info{(keys[i]?FR_VIDEO_KEY:0u)|(capture.separateCursor()?FR_VIDEO_CURSOR_SEPARATE:0u),++sequence,uint32_t(w),uint32_t(h),epoch,uint64_t(clock.nsecsElapsed()/1000)};
      QByteArray packet(FR_VIDEO_HEADER,Qt::Uninitialized);fr_video_write(reinterpret_cast<uint8_t*>(packet.data()),&info);packet+=output[i];m_pending=true;emit this->packet(packet);++frames;recovery.restart();
      if(announced){emit status(furinaStatus("显示配置变化后的实时采集已恢复。","Live capture recovered after the display configuration change."));announced=false;}
     }
