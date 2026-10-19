@@ -1,6 +1,13 @@
 #include "cast_source.h"
 #include <stdio.h>
-#define CHECK(condition) do { if (!(condition)) { fprintf(stderr, "Failed: %s, line %d\n", #condition, __LINE__); return 1; } } while (0)
+#define CHECK(condition)                                                                                     \
+    do {                                                                                                     \
+        if (!(condition)) {                                                                                  \
+            fprintf(stderr, "Failed: %s, line %d\n", #condition, __LINE__);                                  \
+            return 1;                                                                                        \
+        }                                                                                                    \
+    } while (0)
+
 int main(void) {
     const fr_cast_display main = {0, 0, 1920, 1080, 1};
     const fr_cast_display right = {1920, 0, 2560, 1440, 0};

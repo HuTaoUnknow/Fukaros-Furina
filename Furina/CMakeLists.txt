@@ -1,117 +1,27 @@
 cmake_minimum_required(VERSION 3.22)
-project(Furina VERSION 0.4.18 LANGUAGES C CXX)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Network)
-qt_add_executable(Furina resources.qrc main.cpp mainwindow.cpp mainwindow.h mainwindow.ui settings.ui core/androidbridge.cpp core/androidbridge.h
- core/furina_protocol.c core/furina_protocol.h core/peer.cpp core/peer.h core/screenview.cpp core/screenview.h core/interface_support.cpp core/interface_support.h core/session_consent.cpp core/session_consent.h core/video_policy.c core/video_policy.h core/desktop_video.cpp core/desktop_video.h core/desktop_cursor.h core/cursor_shape.c core/cursor_shape.h)
-target_include_directories(Furina PRIVATE core core/vendor/ffmpeg)
-target_link_libraries(Furina PRIVATE Qt6::Widgets Qt6::Network)
+project(Furina VERSION 0.4.19 LANGUAGES C CXX)
+include(../cmake/ProjectDefaults.cmake)
+set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/forms")
+
+add_library(furina_android_bridge STATIC core/platform/androidbridge.cpp core/platform/androidbridge.h)
+target_include_directories(furina_android_bridge PUBLIC core/platform)
+target_link_libraries(furina_android_bridge PUBLIC furina_protocol Qt6::Gui)
+
+add_library(furina_app STATIC
+    ui/mainwindow.cpp ui/mainwindow.h
+    ui/mainwindow_settings.cpp ui/mainwindow_session.cpp ui/mainwindow_video.cpp
+    ui/mobile_layout.cpp ui/mobile_layout.h
+    ui/forms/mainwindow.ui ui/forms/settings.ui
+)
+target_include_directories(furina_app PUBLIC ui)
+target_link_libraries(furina_app PUBLIC furina_android_bridge furina_session furina_settings furina_video)
+qt_add_executable(Furina main.cpp resources.qrc)
+target_link_libraries(Furina PRIVATE furina_app)
 if(ANDROID)
- file(GLOB_RECURSE FURINA_JAVA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/core/android/*.java" "${CMAKE_CURRENT_SOURCE_DIR}/android/src/*.java")
- file(GLOB_RECURSE FURINA_ANDROID_RESOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/android/res/*.xml" "${CMAKE_CURRENT_SOURCE_DIR}/android/res/*.png")
- set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FURINA_JAVA_SOURCES})
- set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FURINA_ANDROID_RESOURCES})
- set_source_files_properties(${FURINA_JAVA_SOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
- target_sources(Furina PRIVATE ${FURINA_JAVA_SOURCES})
- set(FURINA_ANDROID_PACKAGE "${CMAKE_CURRENT_BINARY_DIR}/furina-android-package")
- file(MAKE_DIRECTORY "${FURINA_ANDROID_PACKAGE}")
- file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/android/" DESTINATION "${FURINA_ANDROID_PACKAGE}")
- file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/core/android/" DESTINATION "${FURINA_ANDROID_PACKAGE}/src")
- set_target_properties(Furina PROPERTIES
-  QT_ANDROID_PACKAGE_SOURCE_DIR "${FURINA_ANDROID_PACKAGE}"
-  QT_ANDROID_PACKAGE_NAME "com.furina.black"
-  QT_ANDROID_MIN_SDK_VERSION 28
-  QT_ANDROID_TARGET_SDK_VERSION 35
-  QT_ANDROID_COMPILE_SDK_VERSION 36
-  QT_ANDROID_SDK_BUILD_TOOLS_REVISION "36.0.0"
-  QT_ANDROID_VERSION_CODE 22
-  QT_ANDROID_VERSION_NAME "0.4.18")
+    include(cmake/AndroidPackage.cmake)
 elseif(MINGW)
- target_link_options(Furina PRIVATE -mwindows)
+    target_link_options(Furina PRIVATE -mwindows)
 endif()
-if(NOT ANDROID)
- include(CTest)
- if(BUILD_TESTING)
-  find_package(Qt6 REQUIRED COMPONENTS Test)
-  qt_add_executable(black_ui_test resources.qrc tests/ui_test.cpp mainwindow.cpp mainwindow.h mainwindow.ui settings.ui core/androidbridge.cpp core/androidbridge.h core/peer.cpp core/peer.h core/screenview.cpp core/screenview.h core/furina_protocol.c core/interface_support.cpp core/interface_support.h core/session_consent.cpp core/session_consent.h core/video_policy.c core/video_policy.h core/desktop_video.cpp core/desktop_video.h core/desktop_cursor.h core/cursor_shape.c core/cursor_shape.h)
-  target_include_directories(black_ui_test PRIVATE core core/vendor/ffmpeg ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(black_ui_test PRIVATE Qt6::Test Qt6::Widgets Qt6::Network)
-  add_test(NAME black_ui COMMAND black_ui_test)
-  set_tests_properties(black_ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_FONTDIR=C:/Windows/Fonts")
- endif()
+if(NOT ANDROID AND BUILD_TESTING)
+    include(cmake/Tests.cmake)
 endif()
-
-if(WIN32)
- foreach(video_target Furina black_ui_test)
-  if(TARGET ${video_target})
-   target_link_libraries(${video_target} PRIVATE d3d11 dxgi ole32 winmm d3dcompiler)
-  endif()
- endforeach()
-endif()
-
-if(BUILD_TESTING AND NOT ANDROID)
- add_executable(video_test core/tests/video_test.c core/video_policy.c core/furina_protocol.c)
- target_include_directories(video_test PRIVATE core)
- add_test(NAME video_policy COMMAND video_test)
-endif()
-
-if(WIN32 AND BUILD_TESTING)
- add_executable(cursor_test core/tests/cursor_test.cpp core/cursor_shape.c)
- target_include_directories(cursor_test PRIVATE core)
- target_link_libraries(cursor_test PRIVATE d3d11 dxgi d3dcompiler)
- add_test(NAME desktop_cursor COMMAND cursor_test)
-endif()
-
-foreach(cast_ui_target Furina black_ui_test)
- if(TARGET ${cast_ui_target})
-  target_sources(${cast_ui_target} PRIVATE core/cast_ui_state.cpp core/cast_ui_state.h core/cast_control.cpp core/cast_control.h)
- endif()
-endforeach()
-
-foreach(network_target Furina black_ui_test)
- if(TARGET ${network_target})
-  target_sources(${network_target} PRIVATE core/network_discovery.cpp core/network_discovery.h)
- endif()
-endforeach()
-
-foreach(settings_target Furina black_ui_test)
- if(TARGET ${settings_target})
-  target_sources(${settings_target} PRIVATE core/settings_support.cpp core/settings_support.h)
- endif()
-endforeach()
-
-foreach(debug_target Furina black_ui_test)
- if(TARGET ${debug_target})
-  target_sources(${debug_target} PRIVATE core/debug_text.cpp core/debug_text.h)
- endif()
-endforeach()
-
-foreach(mobile_target Furina black_ui_test)
- if(TARGET ${mobile_target})
-  target_sources(${mobile_target} PRIVATE core/mobile_layout.cpp core/mobile_layout.h)
- endif()
-endforeach()
-
-foreach(pointer_target Furina black_ui_test)
- if(TARGET ${pointer_target})
-  target_sources(${pointer_target} PRIVATE core/pointer_settings.cpp core/pointer_settings.h)
- endif()
-endforeach()
-
-if(WIN32)
- foreach(cursor_capture_target Fukaros ui_test Furina black_ui_test display_recovery_smoke quality_smoke portrait_capture_smoke)
-  if(TARGET ${cursor_capture_target})
-   target_link_libraries(${cursor_capture_target} PRIVATE runtimeobject gdi32)
-  endif()
- endforeach()
-endif()
-
-foreach(presentation_target Furina black_ui_test)
- if(TARGET ${presentation_target})
-  target_sources(${presentation_target} PRIVATE core/presentation_sync.cpp core/presentation_sync.h)
- endif()
-endforeach()

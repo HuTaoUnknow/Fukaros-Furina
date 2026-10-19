@@ -1,14 +1,14 @@
 # Fukaros + Furina
 
-Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前配套版本为 **v0.4.18**。
+Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前配套版本为 **v0.4.19**。
 
 ## 下载
 
-在 [v0.4.18 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.18) 下载并同时更新两端：
+在 [v0.4.19 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.19) 下载并同时更新两端：
 
-- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.18/Fukaros-0.4.18-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
-- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.18/Furina-0.4.18-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
-- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.18.md)。当前仍为预览版本；详细测试范围见 [发布验证](docs/VALIDATION.md)。
+- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.19/Fukaros-0.4.19-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
+- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.19/Furina-0.4.19-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
+- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.19.md)。当前为稳定版本；详细测试范围见 [发布验证](docs/VALIDATION.md)。
 
 ## 功能
 
@@ -33,13 +33,17 @@ Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项�
 ## 项目结构
 
 ```text
-Fukaros/       Windows 端：Qt Widgets UI、虚拟显示、采集与编码
-Furina/        Android 端：Qt UI、系统录屏、硬件解码与触控
-  core/       各端的协议、连接、会话、鼠标和视频核心逻辑
-docs/          更新记录、验证与第三方组件信息
+core/          双端共享协议、传输、会话、设置、日志和视频核心
+ui/            双端共用控件、主题和全屏呈现
+Fukaros/       Windows 平台实现、电脑界面与测试
+Furina/        Android 平台实现、移动界面与桌面模拟测试
+third_party/   FFmpeg / NVENC 头文件和许可证，只维护一份
+cmake/         公共模块与构建辅助配置
+tests/         公共回归测试
+docs/          项目结构、更新记录、验证与第三方信息
 ```
 
-两个项目可分别用 Qt Creator 打开 `CMakeLists.txt`；`.ui` 文件可在 Qt Designer 中编辑。代码使用 C11、C++17，Android 平台接口使用 Java / JNI。历史变化见 [更新记录](docs/CHANGELOG.md)。
+可在 Qt Creator 打开仓库根目录一次构建两个桌面目标，也可分别打开两端的 `CMakeLists.txt`。Android APK 使用 `Furina/` 的 Android Kit；`.ui` 文件可在 Qt Designer 中编辑。代码使用 C11、C++17，Android 平台接口使用 Java / JNI。目录职责、依赖和开发入口见 [代码结构](docs/ARCHITECTURE.md)，历史变化见 [更新记录](docs/CHANGELOG.md)。
 
 ## 编译
 

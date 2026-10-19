@@ -16,11 +16,11 @@ if($Package){
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'build-desktop\Fukaros.exe') -Destination $dest
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'build-desktop\virtual_display_helper.exe') -Destination $dest
  $driverDest=Join-Path $dest 'virtual-display';New-Item -ItemType Directory -Path $driverDest -Force | Out-Null
- Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'core\virtual-display\driver') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $driverDest -Force}
+ Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'core\display\virtual-display\driver') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $driverDest -Force}
  & (Join-Path $kit 'bin\windeployqt.exe') --release --no-translations (Join-Path $dest 'Fukaros.exe')
  if($LASTEXITCODE){throw 'Deployment failed'}
  foreach($dll in @('avcodec-61.dll','avutil-59.dll','swscale-8.dll','swresample-5.dll')){Copy-Item -LiteralPath (Join-Path $kit ('bin\'+$dll)) -Destination $dest}
- Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'core\vendor\ffmpeg\COPYING.LGPLv2.1') -Destination (Join-Path $dest 'FFmpeg-LGPL-2.1.txt')
+ Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\third_party\ffmpeg\COPYING.LGPLv2.1') -Destination (Join-Path $dest 'FFmpeg-LGPL-2.1.txt')
 }
 
 if($Package){
@@ -31,7 +31,7 @@ if($Package){
  }
  $licenseDir=Join-Path $dest 'licenses';New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\docs\THIRD_PARTY.md') -Destination (Join-Path $licenseDir 'THIRD_PARTY.md')
- foreach($license in @('COPYING.LGPLv2.1','LICENSE.md')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('core\vendor\ffmpeg\'+$license)) -Destination $licenseDir}
+ foreach($license in @('COPYING.LGPLv2.1','LICENSE.md')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\third_party\ffmpeg\'+$license)) -Destination $licenseDir}
  Copy-Item -Path (Join-Path $PSScriptRoot '..\docs\licenses\*') -Destination $licenseDir
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\docs\FFmpeg-runtime.json') -Destination $licenseDir
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\README.md') -Destination (Join-Path $dest 'README.md')

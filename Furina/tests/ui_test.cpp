@@ -16,187 +16,574 @@
 #include <QNetworkDatagram>
 #include <QNetworkProxy>
 #include "mainwindow.h"
-static int requestCount(const QSignalSpy &spy){int count=0;for(const auto &row:spy)if(row[1].toUInt()==FR_APPROVAL_REQUEST)++count;return count;}
-static bool actionSeen(const QSignalSpy &spy,quint32 action){for(const auto &row:spy)if(row[0].toUInt()==action)return true;return false;}
-class UiTest:public QObject{
- Q_OBJECT
-private slots:
- void initTestCase(){QCoreApplication::setOrganizationName("FurinaTests");QCoreApplication::setApplicationName("FurinaUi60");}
 
- void backAndResumePreserveApprovedSession(){
-  MainWindow w;w.resize(390,780);w.show();auto *bridge=w.findChild<AndroidBridge*>();auto *peer=w.findChild<Peer*>();auto *consent=w.findChild<SessionConsent*>();
-  Peer other;QSignalSpy controls(&other,&Peer::session),status(bridge,&AndroidBridge::status);
-  QVERIFY(other.listen(29909,"resume-session-code","127.0.0.1"));peer->connectTo("127.0.0.1",29909,"resume-session-code");QTRY_VERIFY(peer->ready()&&other.ready());
-  other.sendApproval(4701,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE|FR_APPROVAL_EXTEND);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(consent->active());
-  QCOMPARE(bridge->property("sessionKept").toBool(),true);
-  w.findChild<QPushButton*>("settings")->click();auto *settings=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(settings->isVisible());bridge->backRequested();QTRY_VERIFY(!settings->isVisible());
-  w.findChild<QPushButton*>("maximize")->click();QTRY_VERIFY(w.isFullScreen());QTRY_VERIFY(actionSeen(controls,FR_FULLSCREEN_CONFIRMED));bridge->backRequested();QTRY_VERIFY(!w.isFullScreen());QTRY_VERIFY(actionSeen(controls,FR_RESTORED_CONFIRMED));QVERIFY(consent->active()&&peer->ready());
-  bridge->backRequested();QTRY_VERIFY(!status.isEmpty());QVERIFY(status.last()[0].toString().contains("连接保留"));
-  qApp->applicationStateChanged(Qt::ApplicationSuspended);QVERIFY(consent->active()&&peer->ready());QVERIFY(!w.updatesEnabled());
-  qApp->applicationStateChanged(Qt::ApplicationActive);QTRY_VERIFY(actionSeen(controls,FR_REQUEST_KEY));QVERIFY(w.updatesEnabled());QVERIFY(consent->active()&&peer->ready());
-  bridge->stopRequested();QTRY_VERIFY(!other.ready());QCOMPARE(bridge->property("sessionKept").toBool(),false);
- }
+static int requestCount(const QSignalSpy& spy) {
+    int count = 0;
+    for (const auto& row : spy)
+        if (row[1].toUInt() == FR_APPROVAL_REQUEST)
+            ++count;
+    return count;
+}
 
- void portraitLayoutAndConsent(){
-  MainWindow w;w.resize(390,780);w.show();
-  auto *toolbar=w.findChild<QWidget*>("portraitToolbar"),*tabs=w.findChild<QWidget*>("portraitTabs");
-  auto *modes=w.findChild<QCheckBox*>("showCasting"),*logs=w.findChild<QCheckBox*>("showDebug");
-  auto *direction=w.findChild<QWidget*>("directionPanel"),*debug=w.findChild<QWidget*>("debugPanel");
-  auto *view=w.findChild<ScreenView*>();auto *start=w.findChild<QPushButton*>("start");
-  QTRY_VERIFY(toolbar->isVisible());QVERIFY(!w.findChild<QWidget*>("sidebar")->isVisible());
-  QCOMPARE(start->parentWidget(),toolbar);QVERIFY(start->x()<w.findChild<QPushButton*>("settings")->x());
-  QVERIFY(w.findChild<QPushButton*>("settings")->x()<w.findChild<QPushButton*>("maximize")->x());
-  QVERIFY(modes->isChecked()&&direction->isVisible()&&!debug->isVisible());
-  for(const QSize size:{QSize(360,640),QSize(390,780),QSize(600,960)}){
-   w.resize(size);QTest::qWait(20);
-   for(const char *name:{"portraitToolbar","portraitTabs","directionPanel","resolutionPanel"}){
-    auto *panel=w.findChild<QWidget*>(name);QVERIFY(w.rect().contains(QRect(panel->mapTo(&w,QPoint()),panel->size())));
-   }
-   QVERIFY(view->mapTo(&w,QPoint()).y()<toolbar->mapTo(&w,QPoint()).y());
-   QVERIFY(toolbar->mapTo(&w,QPoint()).y()<tabs->mapTo(&w,QPoint()).y());
-   w.grab().save(QString("mobile-portrait-modes-%1.png").arg(size.width()));
-  }
-  w.resize(390,780);QImage image(1920,1080,QImage::Format_RGB32);image.fill(QColor("#286987"));view->setImage(image);
-  logs->click();QVERIFY(logs->isChecked()&&!modes->isChecked()&&debug->isVisible()&&!direction->isVisible());
-  w.findChild<AndroidBridge*>()->videoStats(false,60,1.5,0,59.8,1920,1080,1000);
-  auto *text=w.findChild<QPlainTextEdit*>("log");QVERIFY(text->toPlainText().contains("解码帧率 60.0 帧/秒"));
-  QVERIFY(text->toPlainText().contains("display 59.8 FPS"));QVERIFY(view->hasImage());
-  w.grab().save("mobile-portrait-debug.png");logs->click();QVERIFY(logs->isChecked());
-  modes->click();
-  // Approval stays accessible even when the log page is hidden.
-  Peer other;QVERIFY(other.listen(29905,"portrait-consent-code"));
-  auto *peer=w.findChild<Peer*>();peer->connectTo("127.0.0.1",29905,"portrait-consent-code");QTRY_VERIFY(other.ready()&&peer->ready());
-  other.sendApproval(4501,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);
-  auto *consent=w.findChild<QWidget*>("consentPanel");QTRY_VERIFY(consent->isVisible());
-  QVERIFY(!debug->isVisible());QVERIFY(w.rect().contains(QRect(consent->mapTo(&w,QPoint()),consent->size())));
-  w.grab().save("mobile-portrait-consent.png");w.findChild<QPushButton*>("consentReject")->click();QTRY_VERIFY(!consent->isVisible());
-  other.close();QTRY_VERIFY(!peer->ready());view->setImage(image);
-  w.findChild<QPushButton*>("maximize")->click();QTRY_VERIFY(w.isFullScreen());
-  QVERIFY(!toolbar->isVisible()&&!tabs->isVisible()&&!w.findChild<QWidget*>("bottomPanel")->isVisible());
-  QTRY_COMPARE(view->size(),w.centralWidget()->size());view->leaveFullScreen();QTRY_VERIFY(!w.isFullScreen());
-  w.resize(780,390);QTest::qWait(20);QVERIFY(!toolbar->isVisible()&&!tabs->isVisible());
-  QVERIFY(w.findChild<QWidget*>("sidebar")->isVisible()&&direction->isVisible()&&debug->isVisible());
-  QCOMPARE(start->parentWidget(),w.findChild<QWidget*>("sidebar"));
-  w.resize(390,780);QTest::qWait(20);QVERIFY(toolbar->isVisible()&&direction->isVisible()&&!debug->isVisible());
-  QVERIFY(view->hasImage());
- }
+static bool actionSeen(const QSignalSpy& spy, quint32 action) {
+    for (const auto& row : spy)
+        if (row[0].toUInt() == action)
+            return true;
+    return false;
+}
 
- void chineseDebugParameters(){
-  const QString english="width=1080 height=1920 fps=60 queueMs=16 bitrate=12 Mbps codec=c2.qti.avc.decoder GPU=2 ms";
-  const auto entry=furinaLog(english,english);const auto chinese=entry.section('\n',0,0);
-  for(const auto *word:{"宽度=1080","高度=1920","帧率=60","队列时长=16","码率=12 兆比特/秒","编解码器=c2.qti.avc.decoder","图形处理器=2 毫秒"})QVERIFY2(chinese.contains(QString::fromUtf8(word)),qPrintable(chinese));
-  QVERIFY(entry.section('\n',1).endsWith(english));
-  QVERIFY(QRegularExpression("^\\[\\d{2}:\\d{2}:\\d{2}\\] 中 · ").match(chinese).hasMatch());
- }
- void extensionOrientationIsFixedUntilStop(){
-  MainWindow w;w.resize(390,780);w.show();auto *bridge=w.findChild<AndroidBridge*>();auto *consent=w.findChild<SessionConsent*>();auto *peer=w.findChild<Peer*>();
-  Peer other;QSignalSpy approvals(&other,&Peer::approval);QVERIFY(other.listen(29907,"extension-lock-code"));peer->connectTo("127.0.0.1",29907,"extension-lock-code");QTRY_VERIFY(peer->ready()&&other.ready());
-  other.sendApproval(4601,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE|FR_APPROVAL_EXTEND);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();
-  QTRY_VERIFY(consent->active());QTRY_COMPARE(approvals.count(),1);QVERIFY(approvals.last()[2].toUInt()&FR_APPROVAL_PORTRAIT);
-  QCOMPARE(bridge->property("extensionOrientation").toInt(),1);QVERIFY(consent->portrait());
-  w.resize(780,390);QTest::qWait(20);QVERIFY(consent->portrait());QCOMPARE(bridge->property("extensionOrientation").toInt(),1);
-  w.findChild<QPushButton*>("start")->click();QTRY_VERIFY(!other.ready());QCOMPARE(bridge->property("extensionOrientation").toInt(),-1);
-  peer->connectTo("127.0.0.1",29907,"extension-lock-code");QTRY_VERIFY(peer->ready()&&other.ready());
-  other.sendApproval(4602,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE|FR_APPROVAL_EXTEND);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();
-  QTRY_VERIFY(consent->active());QVERIFY(!consent->portrait());QCOMPARE(bridge->property("extensionOrientation").toInt(),0);
-  other.close();QTRY_VERIFY(!peer->ready());QCOMPARE(bridge->property("extensionOrientation").toInt(),0);
-  w.findChild<QPushButton*>("start")->click();QCOMPARE(bridge->property("extensionOrientation").toInt(),-1);
- }
+class UiTest : public QObject {
+    Q_OBJECT
+  private slots:
 
- void stepsAndRequiredFields(){
-  MainWindow w;w.show();w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());
-  QVERIFY(!w.findChild<QLineEdit*>("token")->property("settingsRole").isValid());
-  for(const auto *name:{"serial","host"})QCOMPARE(w.findChild<QLineEdit*>(name)->property("settingsRole").toString(),QString("optional"));
-  w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);w.findChild<QScrollArea*>("settingsScroll")->verticalScrollBar()->setValue(0);QTest::qWait(30);
-  auto *page=w.findChild<QWidget*>("usbPage");
-  for(const auto *name:{"serial"}){auto *field=w.findChild<QLineEdit*>(name);QVERIFY(page->rect().contains(QRect(field->mapTo(page,QPoint()),field->size())));}
-  w.findChild<StepHelpButton*>("usbSteps")->click();auto *popup=dialog->findChild<QFrame*>("stepsPopup");QVERIFY(popup&&popup->isVisible());QVERIFY(dialog->rect().contains(popup->geometry()));dialog->grab().save("mobile-usb-help.png");popup->findChild<QPushButton*>("closeSteps")->click();
-  QVERIFY(!w.findChild<QLabel*>("usbHint")&&!w.findChild<QLabel*>("wifiHint")&&!w.findChild<QLabel*>("connectionHint"));dialog->reject();
- }
+    void initTestCase() {
+        QCoreApplication::setOrganizationName("FurinaTests");
+        QCoreApplication::setApplicationName("FurinaUi60");
+    }
 
- void usbServiceIncludesDiscovery(){
-  MainWindow w;w.findChild<QLineEdit*>("token")->setText("usb-mobile-test-code");w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
-  // A Wi-Fi-only bind address must not prevent the USB page from listening.
-  w.findChild<QLineEdit*>("host")->setText("invalid-wifi-address");w.findChild<QPushButton*>("start")->click();
-  QCOMPARE(w.findChild<CastControl*>()->state(),CastControl::Waiting);
-  QUdpSocket client;client.setProxy(QNetworkProxy::NoProxy);QVERIFY(client.bind(QHostAddress("127.0.0.2"),0));
-  const QByteArray nonce(32,'a');client.writeDatagram(furinaDiscoveryRequest(nonce),QHostAddress("127.0.0.2"),27184);
-  QTRY_VERIFY(client.hasPendingDatagrams());QVERIFY(furinaDiscoveryMatches(client.receiveDatagram().data(),nonce));
-  w.findChild<QPushButton*>("start")->click();QCOMPARE(w.findChild<CastControl*>()->state(),CastControl::Start);
-  QUdpSocket released;QVERIFY(released.bind(QHostAddress::AnyIPv4,27184));
- }
+    void backAndResumePreserveApprovedSession() {
+        MainWindow w;
+        w.resize(390, 780);
+        w.show();
+        auto* bridge = w.findChild<AndroidBridge*>();
+        auto* peer = w.findChild<Peer*>();
+        auto* consent = w.findChild<SessionConsent*>();
+        Peer other;
+        QSignalSpy controls(&other, &Peer::session), status(bridge, &AndroidBridge::status);
+        QVERIFY(other.listen(29909, "resume-session-code", "127.0.0.1"));
+        peer->connectTo("127.0.0.1", 29909, "resume-session-code");
+        QTRY_VERIFY(peer->ready() && other.ready());
+        other.sendApproval(4701, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE | FR_APPROVAL_EXTEND);
+        QTRY_VERIFY(consent->pending());
+        w.findChild<QPushButton*>("consentAccept")->click();
+        QTRY_VERIFY(consent->active());
+        QCOMPARE(bridge->property("sessionKept").toBool(), true);
+        w.findChild<QPushButton*>("settings")->click();
+        auto* settings = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(settings->isVisible());
+        bridge->backRequested();
+        QTRY_VERIFY(!settings->isVisible());
+        w.findChild<QPushButton*>("maximize")->click();
+        QTRY_VERIFY(w.isFullScreen());
+        QTRY_VERIFY(actionSeen(controls, FR_FULLSCREEN_CONFIRMED));
+        bridge->backRequested();
+        QTRY_VERIFY(!w.isFullScreen());
+        QTRY_VERIFY(actionSeen(controls, FR_RESTORED_CONFIRMED));
+        QVERIFY(consent->active() && peer->ready());
+        bridge->backRequested();
+        QTRY_VERIFY(!status.isEmpty());
+        QVERIFY(status.last()[0].toString().contains("连接保留"));
+        qApp->applicationStateChanged(Qt::ApplicationSuspended);
+        QVERIFY(consent->active() && peer->ready());
+        QVERIFY(!w.updatesEnabled());
+        qApp->applicationStateChanged(Qt::ApplicationActive);
+        QTRY_VERIFY(actionSeen(controls, FR_REQUEST_KEY));
+        QVERIFY(w.updatesEnabled());
+        QVERIFY(consent->active() && peer->ready());
+        bridge->stopRequested();
+        QTRY_VERIFY(!other.ready());
+        QCOMPARE(bridge->property("sessionKept").toBool(), false);
+    }
 
- void stopSynchronization_data(){
-  QTest::addColumn<bool>("remoteStops");QTest::addColumn<bool>("remoteShares");
-  QTest::newRow("local-stop-receiving")<<false<<true;QTest::newRow("local-stop-sharing")<<false<<false;
-  QTest::newRow("remote-stop-receiving")<<true<<true;QTest::newRow("remote-stop-sharing")<<true<<false;
- }
- void stopSynchronization(){
-  QFETCH(bool,remoteStops);QFETCH(bool,remoteShares);MainWindow w;w.show();
-  auto *peer=w.findChild<Peer*>();auto *consent=w.findChild<SessionConsent*>();auto *state=w.findChild<CastUiState*>();auto *control=w.findChild<CastControl*>();auto *button=w.findChild<QPushButton*>("start");auto *view=w.findChild<ScreenView*>();
-  Peer other;QSignalSpy approvals(&other,&Peer::approval);QVERIFY(other.listen(29904,"stop-sync-code"));peer->connectTo("127.0.0.1",29904,"stop-sync-code");QTRY_VERIFY(peer->ready()&&other.ready());
-  // Authentication alone is idle, and consent is still a waiting state.
-  QCOMPARE(control->state(),CastControl::Start);const quint32 options=remoteShares?FR_APPROVAL_SHARE:FR_APPROVAL_RECEIVE;
-  other.sendApproval(3201,FR_APPROVAL_REQUEST,options);QTRY_VERIFY(consent->pending());QCOMPARE(control->state(),CastControl::Waiting);
-  w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(state->occupied());QCOMPARE(control->state(),CastControl::Stop);QVERIFY(state->locked());
-  if(remoteShares){QImage image(80,60,QImage::Format_RGB32);image.fill(Qt::blue);other.sendFrame(image);QTRY_VERIFY(view->hasImage());}else{QVERIFY(view->busy());}
-  if(remoteStops){other.sendApproval(3201,FR_APPROVAL_CANCEL,options);other.close(true);}else{
-   button->click();QTRY_VERIFY([&]{for(const auto &row:approvals)if(row[0].toUInt()==3201&&row[1].toUInt()==FR_APPROVAL_CANCEL&&row[2].toUInt()==options)return true;return false;}());
-  }
-  QTRY_COMPARE(control->state(),CastControl::Start);QTRY_VERIFY(!peer->ready()&&!other.ready());QVERIFY(!consent->active()&&!consent->pending());QVERIFY(!state->locked()&&!state->occupied());
-  QVERIFY(!view->hasImage()&&!view->busy());QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled()&&w.findChild<QCheckBox*>("receive")->isEnabled());QCOMPARE(button->property("castState").toString(),QString("start"));
-  if(remoteStops)QVERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("stopped casting"));
- }
- void resolutionSelection(){
-  QSettings settings;settings.remove("resolution");MainWindow w;w.show();
-  auto *automatic=w.findChild<QPushButton*>("resolution0");auto *full=w.findChild<QPushButton*>("resolution1920");auto *hd=w.findChild<QPushButton*>("resolution1080");auto *low=w.findChild<QPushButton*>("resolution720");
-  QVERIFY(automatic&&full&&hd&&low);QVERIFY(automatic->isChecked());QVERIFY(w.findChild<QWidget*>("resolutionPanel")->isVisible());
-  full->click();QVERIFY(full->isChecked()&&!automatic->isChecked());settings.sync();QCOMPARE(settings.value("resolution").toInt(),1920);
-  low->click();QVERIFY(low->isChecked()&&!full->isChecked());automatic->click();QVERIFY(automatic->isChecked()&&!low->isChecked());
- }
+    void portraitLayoutAndConsent() {
+        MainWindow w;
+        w.resize(390, 780);
+        w.show();
+        auto *toolbar = w.findChild<QWidget*>("portraitToolbar"),
+             *tabs = w.findChild<QWidget*>("portraitTabs");
+        auto *modes = w.findChild<QCheckBox*>("showCasting"), *logs = w.findChild<QCheckBox*>("showDebug");
+        auto *direction = w.findChild<QWidget*>("directionPanel"),
+             *debug = w.findChild<QWidget*>("debugPanel");
+        auto* view = w.findChild<ScreenView*>();
+        auto* start = w.findChild<QPushButton*>("start");
+        QTRY_VERIFY(toolbar->isVisible());
+        QVERIFY(!w.findChild<QWidget*>("sidebar")->isVisible());
+        QCOMPARE(start->parentWidget(), toolbar);
+        QVERIFY(start->x() < w.findChild<QPushButton*>("settings")->x());
+        QVERIFY(w.findChild<QPushButton*>("settings")->x() < w.findChild<QPushButton*>("maximize")->x());
+        QVERIFY(modes->isChecked() && direction->isVisible() && !debug->isVisible());
+        for (const QSize size : {QSize(360, 640), QSize(390, 780), QSize(600, 960)}) {
+            w.resize(size);
+            QTest::qWait(20);
+            for (const char* name :
+                 {"portraitToolbar", "portraitTabs", "directionPanel", "resolutionPanel"}) {
+                auto* panel = w.findChild<QWidget*>(name);
+                QVERIFY(w.rect().contains(QRect(panel->mapTo(&w, QPoint()), panel->size())));
+            }
+            QVERIFY(view->mapTo(&w, QPoint()).y() < toolbar->mapTo(&w, QPoint()).y());
+            QVERIFY(toolbar->mapTo(&w, QPoint()).y() < tabs->mapTo(&w, QPoint()).y());
+            w.grab().save(QString("mobile-portrait-modes-%1.png").arg(size.width()));
+        }
+        w.resize(390, 780);
+        QImage image(1920, 1080, QImage::Format_RGB32);
+        image.fill(QColor("#286987"));
+        view->setImage(image);
+        logs->click();
+        QVERIFY(logs->isChecked() && !modes->isChecked() && debug->isVisible() && !direction->isVisible());
+        w.findChild<AndroidBridge*>()->videoStats(false, 60, 1.5, 0, 59.8, 1920, 1080, 1000);
+        auto* text = w.findChild<QPlainTextEdit*>("log");
+        QVERIFY(text->toPlainText().contains("解码帧率 60.0 帧/秒"));
+        QVERIFY(text->toPlainText().contains("display 59.8 FPS"));
+        QVERIFY(view->hasImage());
+        w.grab().save("mobile-portrait-debug.png");
+        logs->click();
+        QVERIFY(logs->isChecked());
+        modes->click();
+        // Approval stays accessible even when the log page is hidden.
+        Peer other;
+        QVERIFY(other.listen(29905, "portrait-consent-code"));
+        auto* peer = w.findChild<Peer*>();
+        peer->connectTo("127.0.0.1", 29905, "portrait-consent-code");
+        QTRY_VERIFY(other.ready() && peer->ready());
+        other.sendApproval(4501, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
+        auto* consent = w.findChild<QWidget*>("consentPanel");
+        QTRY_VERIFY(consent->isVisible());
+        QVERIFY(!debug->isVisible());
+        QVERIFY(w.rect().contains(QRect(consent->mapTo(&w, QPoint()), consent->size())));
+        w.grab().save("mobile-portrait-consent.png");
+        w.findChild<QPushButton*>("consentReject")->click();
+        QTRY_VERIFY(!consent->isVisible());
+        other.close();
+        QTRY_VERIFY(!peer->ready());
+        view->setImage(image);
+        w.findChild<QPushButton*>("maximize")->click();
+        QTRY_VERIFY(w.isFullScreen());
+        QVERIFY(!toolbar->isVisible() && !tabs->isVisible() &&
+                !w.findChild<QWidget*>("bottomPanel")->isVisible());
+        QTRY_COMPARE(view->size(), w.centralWidget()->size());
+        view->leaveFullScreen();
+        QTRY_VERIFY(!w.isFullScreen());
+        w.resize(780, 390);
+        QTest::qWait(20);
+        QVERIFY(!toolbar->isVisible() && !tabs->isVisible());
+        QVERIFY(w.findChild<QWidget*>("sidebar")->isVisible() && direction->isVisible() &&
+                debug->isVisible());
+        QCOMPARE(start->parentWidget(), w.findChild<QWidget*>("sidebar"));
+        w.resize(390, 780);
+        QTest::qWait(20);
+        QVERIFY(toolbar->isVisible() && direction->isVisible() && !debug->isVisible());
+        QVERIFY(view->hasImage());
+    }
 
+    void chineseDebugParameters() {
+        const QString english =
+            "width=1080 height=1920 fps=60 queueMs=16 bitrate=12 Mbps codec=c2.qti.avc.decoder GPU=2 ms";
+        const auto entry = furinaLog(english, english);
+        const auto chinese = entry.section('\n', 0, 0);
+        for (const auto* word : {"宽度=1080", "高度=1920", "帧率=60", "队列时长=16", "码率=12 兆比特/秒",
+                                 "编解码器=c2.qti.avc.decoder", "图形处理器=2 毫秒"})
+            QVERIFY2(chinese.contains(QString::fromUtf8(word)), qPrintable(chinese));
+        QVERIFY(entry.section('\n', 1).endsWith(english));
+        QVERIFY(QRegularExpression("^\\[\\d{2}:\\d{2}:\\d{2}\\] 中 · ").match(chinese).hasMatch());
+    }
 
- void singleControlCancelsWaiting(){
-  MainWindow w;w.show();auto *button=w.findChild<QPushButton*>("start");auto *control=w.findChild<CastControl*>();QVERIFY(button&&control);QVERIFY(!w.findChild<QPushButton*>("stop"));QVERIFY(button->text().isEmpty()&&!button->icon().isNull());QCOMPARE(button->iconSize(),w.findChild<QPushButton*>("settings")->iconSize());QCOMPARE(control->state(),CastControl::Start);
-  w.findChild<QLineEdit*>("host")->setText("0.0.0.0");w.findChild<QLineEdit*>("token")->setText("control-test-code");
-  QVERIFY(!w.findChild<QLabel*>("castHint")&&!w.findChild<QLabel*>("performanceHint"));
-  QVERIFY(w.findChild<QFrame*>("modeSeparator")->isVisible());QVERIFY(w.findChild<QFrame*>("resolutionSeparator")->isVisible());
-  button->click();QCOMPARE(control->state(),CastControl::Waiting);QVERIFY(button->isEnabled());const auto first=button->icon().cacheKey();QTest::qWait(160);QCOMPARE(control->state(),CastControl::Waiting);QVERIFY(first!=button->icon().cacheKey());w.grab().save("control-waiting.png");
-  button->click();QCOMPARE(control->state(),CastControl::Start);QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled());
-  QTcpServer released;QVERIFY(released.listen(QHostAddress::AnyIPv4,27183));
- }
+    void extensionOrientationIsFixedUntilStop() {
+        MainWindow w;
+        w.resize(390, 780);
+        w.show();
+        auto* bridge = w.findChild<AndroidBridge*>();
+        auto* consent = w.findChild<SessionConsent*>();
+        auto* peer = w.findChild<Peer*>();
+        Peer other;
+        QSignalSpy approvals(&other, &Peer::approval);
+        QVERIFY(other.listen(29907, "extension-lock-code"));
+        peer->connectTo("127.0.0.1", 29907, "extension-lock-code");
+        QTRY_VERIFY(peer->ready() && other.ready());
+        other.sendApproval(4601, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE | FR_APPROVAL_EXTEND);
+        QTRY_VERIFY(consent->pending());
+        w.findChild<QPushButton*>("consentAccept")->click();
+        QTRY_VERIFY(consent->active());
+        QTRY_COMPARE(approvals.count(), 1);
+        QVERIFY(approvals.last()[2].toUInt() & FR_APPROVAL_PORTRAIT);
+        QCOMPARE(bridge->property("extensionOrientation").toInt(), 1);
+        QVERIFY(consent->portrait());
+        w.resize(780, 390);
+        QTest::qWait(20);
+        QVERIFY(consent->portrait());
+        QCOMPARE(bridge->property("extensionOrientation").toInt(), 1);
+        w.findChild<QPushButton*>("start")->click();
+        QTRY_VERIFY(!other.ready());
+        QCOMPARE(bridge->property("extensionOrientation").toInt(), -1);
+        peer->connectTo("127.0.0.1", 29907, "extension-lock-code");
+        QTRY_VERIFY(peer->ready() && other.ready());
+        other.sendApproval(4602, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE | FR_APPROVAL_EXTEND);
+        QTRY_VERIFY(consent->pending());
+        w.findChild<QPushButton*>("consentAccept")->click();
+        QTRY_VERIFY(consent->active());
+        QVERIFY(!consent->portrait());
+        QCOMPARE(bridge->property("extensionOrientation").toInt(), 0);
+        other.close();
+        QTRY_VERIFY(!peer->ready());
+        QCOMPARE(bridge->property("extensionOrientation").toInt(), 0);
+        w.findChild<QPushButton*>("start")->click();
+        QCOMPARE(bridge->property("extensionOrientation").toInt(), -1);
+    }
 
- void connectionSettingsAreSeparated(){
-  MainWindow w;w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());auto *tabs=w.findChild<QTabWidget*>("connectionTabs");QVERIFY(tabs&&tabs->count()==2);
-  QVERIFY(w.findChild<QWidget*>("usbPage")->isAncestorOf(w.findChild<QLineEdit*>("serial")));QVERIFY(w.findChild<QWidget*>("wifiPage")->isAncestorOf(w.findChild<QLineEdit*>("host")));tabs->setCurrentIndex(1);QVERIFY(w.findChild<QLineEdit*>("host")->isVisible());tabs->setCurrentIndex(0);QTest::qWait(30);dialog->grab().save("mobile-usb-settings.png");tabs->setCurrentIndex(1);QTest::qWait(30);dialog->grab().save("mobile-wifi-settings.png");dialog->reject();
- }
- void receiveAndControlConsent(){
-  MainWindow w;w.show();auto *view=w.findChild<ScreenView*>();auto *start=w.findChild<QPushButton*>("start"),*stop=start;auto *share=w.findChild<QCheckBox*>("share"),*receive=w.findChild<QCheckBox*>("receive"),*extend=w.findChild<QCheckBox*>("extend"),*duplicate=w.findChild<QCheckBox*>("duplicate");auto *consent=w.findChild<SessionConsent*>();auto *state=w.findChild<CastUiState*>();auto *control=w.findChild<CastControl*>();
-  duplicate->setChecked(true);QVERIFY(receive->isChecked()&&!share->isChecked());QVERIFY(!view->hasImage()&&!view->busy());
-  w.findChild<QPushButton*>("settings")->click();auto *dialog=w.findChild<QDialog*>("SettingsDialog");QTRY_VERIFY(dialog->isVisible());w.findChild<QLineEdit*>("token")->setText("black-ui-code");w.findChild<QLineEdit*>("host")->setText("0.0.0.0");w.findChild<QCheckBox*>("allowControl")->setChecked(false);dialog->accept();
-  start->click();QVERIFY(state->locked()&&!state->occupied());Peer client;QSignalSpy connected(&client,&Peer::connected),status(&client,&Peer::status),sessions(&client,&Peer::session),approvals(&client,&Peer::approval),profiles(&client,&Peer::profile);client.connectTo("127.0.0.2",27183,"black-ui-code");QTRY_COMPARE(connected.count(),1);QCOMPARE(control->state(),CastControl::Waiting);
-  client.sendApproval(1001,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);QTRY_VERIFY(w.findChild<QWidget*>("consentPanel")->isVisible());QVERIFY(!consent->active());QImage image(1024,600,QImage::Format_RGB32);image.fill(QColor(28,90,130));client.sendSession(FR_START_SHARE);client.sendFrame(image);QTest::qWait(30);QVERIFY(!view->hasImage());w.findChild<QPushButton*>("consentReject")->click();QTRY_VERIFY(!consent->pending());QVERIFY(!state->locked());
-  QSignalSpy lateVideo(&client,&Peer::video);QByteArray late(FR_VIDEO_HEADER+1,0);fr_video_info info{FR_VIDEO_KEY,1,720,450,1,0};QVERIFY(fr_video_write(reinterpret_cast<uint8_t*>(late.data()),&info));w.findChild<AndroidBridge*>()->video(late);QTest::qWait(30);QCOMPARE(lateVideo.count(),0);
-  client.sendApproval(1002,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);QTRY_VERIFY(consent->pending());w.findChild<QPushButton*>("consentAccept")->click();QTRY_VERIFY(consent->active()&&!consent->sharing());QVERIFY(state->occupied()&&!view->busy());client.sendSession(FR_START_RECEIVE);client.sendFrame(image);QTRY_VERIFY(view->hasImage());
-  QVERIFY(!share->isEnabled()&&!receive->isEnabled()&&!extend->isEnabled()&&!duplicate->isEnabled());share->click();share->setChecked(true);extend->setChecked(true);QVERIFY(receive->isChecked()&&!share->isChecked());QVERIFY(duplicate->isChecked()&&!extend->isChecked());QVERIFY(client.ready());
-  const auto profileCount=profiles.count();w.findChild<QPushButton*>("resolution720")->click();QTRY_VERIFY(profiles.count()>profileCount);QCOMPARE(profiles.last()[0].toInt(),720);QVERIFY(consent->active());
-  w.findChild<QPushButton*>("settings")->click();QTRY_VERIFY(dialog->isVisible());QVERIFY(!w.findChild<QLineEdit*>("host")->isEnabled());QVERIFY(!w.findChild<QCheckBox*>("allowControl")->isEnabled());QVERIFY(!w.findChild<QDialogButtonBox*>("buttonBox")->button(QDialogButtonBox::Save)->isEnabled());dialog->grab().save("mobile-locked-settings.png");dialog->accept();QVERIFY(client.ready()&&state->occupied());
-  fr_gesture gesture{32768,32768,32768,32768,50};client.sendGesture(gesture);QTRY_VERIFY([&]{for(const auto &row:status)if(row[0].toString().contains("未允许"))return true;return false;}());
-  client.sendSession(FR_MAXIMIZE);QTRY_VERIFY(w.isFullScreen());client.sendSession(FR_RESTORE);QTRY_VERIFY(!w.isFullScreen());QVERIFY(state->locked());w.grab().save("mobile-locked-receive.png");
-  const auto grantTablet=[&](){const auto count=requestCount(approvals);if(control->state()!=CastControl::Start){stop->click();QTRY_VERIFY(!client.ready());}start->click();if(!client.ready())client.connectTo("127.0.0.2",27183,"black-ui-code");QTRY_VERIFY(client.ready());QTRY_COMPARE(requestCount(approvals),count+1);const auto row=approvals.last();QCOMPARE(row[1].toUInt(),quint32(FR_APPROVAL_REQUEST));client.sendApproval(row[0].toUInt(),FR_APPROVAL_ACCEPT,row[2].toUInt());QTRY_VERIFY(consent->active());QVERIFY(state->occupied());};
-  stop->click();QTRY_VERIFY(!client.ready());QVERIFY(!state->locked()&&extend->isEnabled());extend->setChecked(true);grantTablet();QTRY_VERIFY(actionSeen(sessions,FR_EXTEND));client.sendSession(FR_DUPLICATE);QTest::qWait(30);QVERIFY(extend->isChecked()&&!duplicate->isChecked());
-  stop->click();QTRY_VERIFY(!client.ready());w.findChild<QPushButton*>("settings")->click();QTRY_VERIFY(dialog->isVisible());w.findChild<QCheckBox*>("allowControl")->setChecked(true);dialog->accept();share->click();QVERIFY(share->isChecked()&&!receive->isChecked());grantTablet();QTRY_VERIFY(w.findChild<AndroidBridge*>()->wantFrame.load());QVERIFY(view->busy()&&!view->hasImage());view->setImage(image);QVERIFY(!view->hasImage());client.sendGesture(gesture);QTRY_VERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("模拟手势"));w.grab().save("mobile-sharing-busy.png");
-  // Looking at locked settings must preserve an auto probe, otherwise closing
-  // the dialog silently lowers 1440 to 1080 before any five-second frame loss.
-  auto *bridge=w.findChild<AndroidBridge*>();auto *debug=w.findChild<QPlainTextEdit*>("log");w.findChild<QPushButton*>("resolution0")->click();bridge->videoStats(true,60,2,0,0,1080,674,1000);bridge->videoStats(true,60,2,0,0,1080,674,4000);QVERIFY(debug->toPlainText().contains("自动清晰度：最长边 1440"));
-  w.findChild<QPushButton*>("settings")->click();QTRY_VERIFY(dialog->isVisible());dialog->reject();debug->clear();bridge->videoStats(true,49,2,0,0,1440,900,4999);QVERIFY(!debug->toPlainText().contains("自动清晰度：最长边"));bridge->videoStats(true,49,2,0,0,1440,900,1);QVERIFY(debug->toPlainText().contains("自动清晰度：最长边 1080"));QVERIFY(!debug->toPlainText().contains("自动清晰度：最长边 720"));QVERIFY(consent->active()&&state->occupied());
-  const auto active=approvals.last();client.sendApproval(active[0].toUInt(),FR_APPROVAL_CANCEL,active[2].toUInt());QTRY_VERIFY(!consent->active());QVERIFY(!state->locked()&&share->isEnabled()&&!view->busy());
-  grantTablet();client.close();QTRY_VERIFY(!w.findChild<Peer*>()->ready());QVERIFY(state->occupied()&&(start->isEnabled()&&control->state()==CastControl::Stop)&&!share->isEnabled());
-  client.connectTo("127.0.0.2",27183,"black-ui-code");QTRY_VERIFY(client.ready());const auto replies=approvals.count();client.sendApproval(2001,FR_APPROVAL_REQUEST,FR_APPROVAL_SHARE);QTRY_COMPARE(approvals.count(),replies+1);QCOMPARE(approvals.last()[1].toUInt(),quint32(FR_APPROVAL_REJECT));QVERIFY(!consent->pending()&&!w.findChild<QWidget*>("consentPanel")->isVisible());QVERIFY(state->occupied()&&share->isChecked()&&view->busy());
-  stop->click();QVERIFY(!state->locked()&&start->isEnabled()&&!view->hasImage()&&!view->busy());
-  receive->click();w.resize(760,430);QTest::qWait(40);w.grab().save("mobile-unlocked-landscape.png");QCOMPARE(w.findChild<QWidget*>("sidebar")->width(),48);
- }
+    void stepsAndRequiredFields() {
+        MainWindow w;
+        w.show();
+        w.findChild<QPushButton*>("settings")->click();
+        auto* dialog = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(dialog->isVisible());
+        QVERIFY(!w.findChild<QLineEdit*>("token")->property("settingsRole").isValid());
+        for (const auto* name : {"serial", "host"})
+            QCOMPARE(w.findChild<QLineEdit*>(name)->property("settingsRole").toString(), QString("optional"));
+        w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
+        w.findChild<QScrollArea*>("settingsScroll")->verticalScrollBar()->setValue(0);
+        QTest::qWait(30);
+        auto* page = w.findChild<QWidget*>("usbPage");
+        for (const auto* name : {"serial"}) {
+            auto* field = w.findChild<QLineEdit*>(name);
+            QVERIFY(page->rect().contains(QRect(field->mapTo(page, QPoint()), field->size())));
+        }
+        w.findChild<StepHelpButton*>("usbSteps")->click();
+        auto* popup = dialog->findChild<QFrame*>("stepsPopup");
+        QVERIFY(popup && popup->isVisible());
+        QVERIFY(dialog->rect().contains(popup->geometry()));
+        dialog->grab().save("mobile-usb-help.png");
+        popup->findChild<QPushButton*>("closeSteps")->click();
+        QVERIFY(!w.findChild<QLabel*>("usbHint") && !w.findChild<QLabel*>("wifiHint") &&
+                !w.findChild<QLabel*>("connectionHint"));
+        dialog->reject();
+    }
 
+    void usbServiceIncludesDiscovery() {
+        MainWindow w;
+        w.findChild<QLineEdit*>("token")->setText("usb-mobile-test-code");
+        w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
+        // A Wi-Fi-only bind address must not prevent the USB page from listening.
+        w.findChild<QLineEdit*>("host")->setText("invalid-wifi-address");
+        w.findChild<QPushButton*>("start")->click();
+        QCOMPARE(w.findChild<CastControl*>()->state(), CastControl::Waiting);
+        QUdpSocket client;
+        client.setProxy(QNetworkProxy::NoProxy);
+        QVERIFY(client.bind(QHostAddress("127.0.0.2"), 0));
+        const QByteArray nonce(32, 'a');
+        client.writeDatagram(furinaDiscoveryRequest(nonce), QHostAddress("127.0.0.2"), 27184);
+        QTRY_VERIFY(client.hasPendingDatagrams());
+        QVERIFY(furinaDiscoveryMatches(client.receiveDatagram().data(), nonce));
+        w.findChild<QPushButton*>("start")->click();
+        QCOMPARE(w.findChild<CastControl*>()->state(), CastControl::Start);
+        QUdpSocket released;
+        QVERIFY(released.bind(QHostAddress::AnyIPv4, 27184));
+    }
+
+    void stopSynchronization_data() {
+        QTest::addColumn<bool>("remoteStops");
+        QTest::addColumn<bool>("remoteShares");
+        QTest::newRow("local-stop-receiving") << false << true;
+        QTest::newRow("local-stop-sharing") << false << false;
+        QTest::newRow("remote-stop-receiving") << true << true;
+        QTest::newRow("remote-stop-sharing") << true << false;
+    }
+
+    void stopSynchronization() {
+        QFETCH(bool, remoteStops);
+        QFETCH(bool, remoteShares);
+        MainWindow w;
+        w.show();
+        auto* peer = w.findChild<Peer*>();
+        auto* consent = w.findChild<SessionConsent*>();
+        auto* state = w.findChild<CastUiState*>();
+        auto* control = w.findChild<CastControl*>();
+        auto* button = w.findChild<QPushButton*>("start");
+        auto* view = w.findChild<ScreenView*>();
+        Peer other;
+        QSignalSpy approvals(&other, &Peer::approval);
+        QVERIFY(other.listen(29904, "stop-sync-code"));
+        peer->connectTo("127.0.0.1", 29904, "stop-sync-code");
+        QTRY_VERIFY(peer->ready() && other.ready());
+        // Authentication alone is idle, and consent is still a waiting state.
+        QCOMPARE(control->state(), CastControl::Start);
+        const quint32 options = remoteShares ? FR_APPROVAL_SHARE : FR_APPROVAL_RECEIVE;
+        other.sendApproval(3201, FR_APPROVAL_REQUEST, options);
+        QTRY_VERIFY(consent->pending());
+        QCOMPARE(control->state(), CastControl::Waiting);
+        w.findChild<QPushButton*>("consentAccept")->click();
+        QTRY_VERIFY(state->occupied());
+        QCOMPARE(control->state(), CastControl::Stop);
+        QVERIFY(state->locked());
+        if (remoteShares) {
+            QImage image(80, 60, QImage::Format_RGB32);
+            image.fill(Qt::blue);
+            other.sendFrame(image);
+            QTRY_VERIFY(view->hasImage());
+        } else {
+            QVERIFY(view->busy());
+        }
+        if (remoteStops) {
+            other.sendApproval(3201, FR_APPROVAL_CANCEL, options);
+            other.close(true);
+        } else {
+            button->click();
+            QTRY_VERIFY([&] {
+                for (const auto& row : approvals)
+                    if (row[0].toUInt() == 3201 && row[1].toUInt() == FR_APPROVAL_CANCEL &&
+                        row[2].toUInt() == options)
+                        return true;
+                return false;
+            }());
+        }
+        QTRY_COMPARE(control->state(), CastControl::Start);
+        QTRY_VERIFY(!peer->ready() && !other.ready());
+        QVERIFY(!consent->active() && !consent->pending());
+        QVERIFY(!state->locked() && !state->occupied());
+        QVERIFY(!view->hasImage() && !view->busy());
+        QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled() &&
+                w.findChild<QCheckBox*>("receive")->isEnabled());
+        QCOMPARE(button->property("castState").toString(), QString("start"));
+        if (remoteStops)
+            QVERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("stopped casting"));
+    }
+
+    void resolutionSelection() {
+        QSettings settings;
+        settings.remove("resolution");
+        MainWindow w;
+        w.show();
+        auto* automatic = w.findChild<QPushButton*>("resolution0");
+        auto* full = w.findChild<QPushButton*>("resolution1920");
+        auto* hd = w.findChild<QPushButton*>("resolution1080");
+        auto* low = w.findChild<QPushButton*>("resolution720");
+        QVERIFY(automatic && full && hd && low);
+        QVERIFY(automatic->isChecked());
+        QVERIFY(w.findChild<QWidget*>("resolutionPanel")->isVisible());
+        full->click();
+        QVERIFY(full->isChecked() && !automatic->isChecked());
+        settings.sync();
+        QCOMPARE(settings.value("resolution").toInt(), 1920);
+        low->click();
+        QVERIFY(low->isChecked() && !full->isChecked());
+        automatic->click();
+        QVERIFY(automatic->isChecked() && !low->isChecked());
+    }
+
+    void singleControlCancelsWaiting() {
+        MainWindow w;
+        w.show();
+        auto* button = w.findChild<QPushButton*>("start");
+        auto* control = w.findChild<CastControl*>();
+        QVERIFY(button && control);
+        QVERIFY(!w.findChild<QPushButton*>("stop"));
+        QVERIFY(button->text().isEmpty() && !button->icon().isNull());
+        QCOMPARE(button->iconSize(), w.findChild<QPushButton*>("settings")->iconSize());
+        QCOMPARE(control->state(), CastControl::Start);
+        w.findChild<QLineEdit*>("host")->setText("0.0.0.0");
+        w.findChild<QLineEdit*>("token")->setText("control-test-code");
+        QVERIFY(!w.findChild<QLabel*>("castHint") && !w.findChild<QLabel*>("performanceHint"));
+        QVERIFY(w.findChild<QFrame*>("modeSeparator")->isVisible());
+        QVERIFY(w.findChild<QFrame*>("resolutionSeparator")->isVisible());
+        button->click();
+        QCOMPARE(control->state(), CastControl::Waiting);
+        QVERIFY(button->isEnabled());
+        const auto first = button->icon().cacheKey();
+        QTest::qWait(160);
+        QCOMPARE(control->state(), CastControl::Waiting);
+        QVERIFY(first != button->icon().cacheKey());
+        w.grab().save("control-waiting.png");
+        button->click();
+        QCOMPARE(control->state(), CastControl::Start);
+        QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled());
+        QTcpServer released;
+        QVERIFY(released.listen(QHostAddress::AnyIPv4, 27183));
+    }
+
+    void connectionSettingsAreSeparated() {
+        MainWindow w;
+        w.findChild<QPushButton*>("settings")->click();
+        auto* dialog = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(dialog->isVisible());
+        auto* tabs = w.findChild<QTabWidget*>("connectionTabs");
+        QVERIFY(tabs && tabs->count() == 2);
+        QVERIFY(w.findChild<QWidget*>("usbPage")->isAncestorOf(w.findChild<QLineEdit*>("serial")));
+        QVERIFY(w.findChild<QWidget*>("wifiPage")->isAncestorOf(w.findChild<QLineEdit*>("host")));
+        tabs->setCurrentIndex(1);
+        QVERIFY(w.findChild<QLineEdit*>("host")->isVisible());
+        tabs->setCurrentIndex(0);
+        QTest::qWait(30);
+        dialog->grab().save("mobile-usb-settings.png");
+        tabs->setCurrentIndex(1);
+        QTest::qWait(30);
+        dialog->grab().save("mobile-wifi-settings.png");
+        dialog->reject();
+    }
+
+    void receiveAndControlConsent() {
+        MainWindow w;
+        w.show();
+        auto* view = w.findChild<ScreenView*>();
+        auto *start = w.findChild<QPushButton*>("start"), *stop = start;
+        auto *share = w.findChild<QCheckBox*>("share"), *receive = w.findChild<QCheckBox*>("receive"),
+             *extend = w.findChild<QCheckBox*>("extend"), *duplicate = w.findChild<QCheckBox*>("duplicate");
+        auto* consent = w.findChild<SessionConsent*>();
+        auto* state = w.findChild<CastUiState*>();
+        auto* control = w.findChild<CastControl*>();
+        duplicate->setChecked(true);
+        QVERIFY(receive->isChecked() && !share->isChecked());
+        QVERIFY(!view->hasImage() && !view->busy());
+        w.findChild<QPushButton*>("settings")->click();
+        auto* dialog = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(dialog->isVisible());
+        w.findChild<QLineEdit*>("token")->setText("black-ui-code");
+        w.findChild<QLineEdit*>("host")->setText("0.0.0.0");
+        w.findChild<QCheckBox*>("allowControl")->setChecked(false);
+        dialog->accept();
+        start->click();
+        QVERIFY(state->locked() && !state->occupied());
+        Peer client;
+        QSignalSpy connected(&client, &Peer::connected), status(&client, &Peer::status),
+            sessions(&client, &Peer::session), approvals(&client, &Peer::approval),
+            profiles(&client, &Peer::profile);
+        client.connectTo("127.0.0.2", 27183, "black-ui-code");
+        QTRY_COMPARE(connected.count(), 1);
+        QCOMPARE(control->state(), CastControl::Waiting);
+        client.sendApproval(1001, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
+        QTRY_VERIFY(w.findChild<QWidget*>("consentPanel")->isVisible());
+        QVERIFY(!consent->active());
+        QImage image(1024, 600, QImage::Format_RGB32);
+        image.fill(QColor(28, 90, 130));
+        client.sendSession(FR_START_SHARE);
+        client.sendFrame(image);
+        QTest::qWait(30);
+        QVERIFY(!view->hasImage());
+        w.findChild<QPushButton*>("consentReject")->click();
+        QTRY_VERIFY(!consent->pending());
+        QVERIFY(!state->locked());
+        QSignalSpy lateVideo(&client, &Peer::video);
+        QByteArray late(FR_VIDEO_HEADER + 1, 0);
+        fr_video_info info{FR_VIDEO_KEY, 1, 720, 450, 1, 0};
+        QVERIFY(fr_video_write(reinterpret_cast<uint8_t*>(late.data()), &info));
+        w.findChild<AndroidBridge*>()->video(late);
+        QTest::qWait(30);
+        QCOMPARE(lateVideo.count(), 0);
+        client.sendApproval(1002, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
+        QTRY_VERIFY(consent->pending());
+        w.findChild<QPushButton*>("consentAccept")->click();
+        QTRY_VERIFY(consent->active() && !consent->sharing());
+        QVERIFY(state->occupied() && !view->busy());
+        client.sendSession(FR_START_RECEIVE);
+        client.sendFrame(image);
+        QTRY_VERIFY(view->hasImage());
+        QVERIFY(!share->isEnabled() && !receive->isEnabled() && !extend->isEnabled() &&
+                !duplicate->isEnabled());
+        share->click();
+        share->setChecked(true);
+        extend->setChecked(true);
+        QVERIFY(receive->isChecked() && !share->isChecked());
+        QVERIFY(duplicate->isChecked() && !extend->isChecked());
+        QVERIFY(client.ready());
+        const auto profileCount = profiles.count();
+        w.findChild<QPushButton*>("resolution720")->click();
+        QTRY_VERIFY(profiles.count() > profileCount);
+        QCOMPARE(profiles.last()[0].toInt(), 720);
+        QVERIFY(consent->active());
+        w.findChild<QPushButton*>("settings")->click();
+        QTRY_VERIFY(dialog->isVisible());
+        QVERIFY(!w.findChild<QLineEdit*>("host")->isEnabled());
+        QVERIFY(!w.findChild<QCheckBox*>("allowControl")->isEnabled());
+        QVERIFY(!w.findChild<QDialogButtonBox*>("buttonBox")->button(QDialogButtonBox::Save)->isEnabled());
+        dialog->grab().save("mobile-locked-settings.png");
+        dialog->accept();
+        QVERIFY(client.ready() && state->occupied());
+        fr_gesture gesture{32768, 32768, 32768, 32768, 50};
+        client.sendGesture(gesture);
+        QTRY_VERIFY([&] {
+            for (const auto& row : status)
+                if (row[0].toString().contains("未允许"))
+                    return true;
+            return false;
+        }());
+        client.sendSession(FR_MAXIMIZE);
+        QTRY_VERIFY(w.isFullScreen());
+        client.sendSession(FR_RESTORE);
+        QTRY_VERIFY(!w.isFullScreen());
+        QVERIFY(state->locked());
+        w.grab().save("mobile-locked-receive.png");
+        const auto grantTablet = [&]() {
+            const auto count = requestCount(approvals);
+            if (control->state() != CastControl::Start) {
+                stop->click();
+                QTRY_VERIFY(!client.ready());
+            }
+            start->click();
+            if (!client.ready())
+                client.connectTo("127.0.0.2", 27183, "black-ui-code");
+            QTRY_VERIFY(client.ready());
+            QTRY_COMPARE(requestCount(approvals), count + 1);
+            const auto row = approvals.last();
+            QCOMPARE(row[1].toUInt(), quint32(FR_APPROVAL_REQUEST));
+            client.sendApproval(row[0].toUInt(), FR_APPROVAL_ACCEPT, row[2].toUInt());
+            QTRY_VERIFY(consent->active());
+            QVERIFY(state->occupied());
+        };
+        stop->click();
+        QTRY_VERIFY(!client.ready());
+        QVERIFY(!state->locked() && extend->isEnabled());
+        extend->setChecked(true);
+        grantTablet();
+        QTRY_VERIFY(actionSeen(sessions, FR_EXTEND));
+        client.sendSession(FR_DUPLICATE);
+        QTest::qWait(30);
+        QVERIFY(extend->isChecked() && !duplicate->isChecked());
+        stop->click();
+        QTRY_VERIFY(!client.ready());
+        w.findChild<QPushButton*>("settings")->click();
+        QTRY_VERIFY(dialog->isVisible());
+        w.findChild<QCheckBox*>("allowControl")->setChecked(true);
+        dialog->accept();
+        share->click();
+        QVERIFY(share->isChecked() && !receive->isChecked());
+        grantTablet();
+        QTRY_VERIFY(w.findChild<AndroidBridge*>()->wantFrame.load());
+        QVERIFY(view->busy() && !view->hasImage());
+        view->setImage(image);
+        QVERIFY(!view->hasImage());
+        client.sendGesture(gesture);
+        QTRY_VERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("模拟手势"));
+        w.grab().save("mobile-sharing-busy.png");
+        // Looking at locked settings must preserve an auto probe, otherwise closing
+        // the dialog silently lowers 1440 to 1080 before any five-second frame loss.
+        auto* bridge = w.findChild<AndroidBridge*>();
+        auto* debug = w.findChild<QPlainTextEdit*>("log");
+        w.findChild<QPushButton*>("resolution0")->click();
+        bridge->videoStats(true, 60, 2, 0, 0, 1080, 674, 1000);
+        bridge->videoStats(true, 60, 2, 0, 0, 1080, 674, 4000);
+        QVERIFY(debug->toPlainText().contains("自动清晰度：最长边 1440"));
+        w.findChild<QPushButton*>("settings")->click();
+        QTRY_VERIFY(dialog->isVisible());
+        dialog->reject();
+        debug->clear();
+        bridge->videoStats(true, 49, 2, 0, 0, 1440, 900, 4999);
+        QVERIFY(!debug->toPlainText().contains("自动清晰度：最长边"));
+        bridge->videoStats(true, 49, 2, 0, 0, 1440, 900, 1);
+        QVERIFY(debug->toPlainText().contains("自动清晰度：最长边 1080"));
+        QVERIFY(!debug->toPlainText().contains("自动清晰度：最长边 720"));
+        QVERIFY(consent->active() && state->occupied());
+        const auto active = approvals.last();
+        client.sendApproval(active[0].toUInt(), FR_APPROVAL_CANCEL, active[2].toUInt());
+        QTRY_VERIFY(!consent->active());
+        QVERIFY(!state->locked() && share->isEnabled() && !view->busy());
+        grantTablet();
+        client.close();
+        QTRY_VERIFY(!w.findChild<Peer*>()->ready());
+        QVERIFY(state->occupied() && (start->isEnabled() && control->state() == CastControl::Stop) &&
+                !share->isEnabled());
+        client.connectTo("127.0.0.2", 27183, "black-ui-code");
+        QTRY_VERIFY(client.ready());
+        const auto replies = approvals.count();
+        client.sendApproval(2001, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
+        QTRY_COMPARE(approvals.count(), replies + 1);
+        QCOMPARE(approvals.last()[1].toUInt(), quint32(FR_APPROVAL_REJECT));
+        QVERIFY(!consent->pending() && !w.findChild<QWidget*>("consentPanel")->isVisible());
+        QVERIFY(state->occupied() && share->isChecked() && view->busy());
+        stop->click();
+        QVERIFY(!state->locked() && start->isEnabled() && !view->hasImage() && !view->busy());
+        receive->click();
+        w.resize(760, 430);
+        QTest::qWait(40);
+        w.grab().save("mobile-unlocked-landscape.png");
+        QCOMPARE(w.findChild<QWidget*>("sidebar")->width(), 48);
+    }
 };
 QTEST_MAIN(UiTest)
 #include "ui_test.moc"
