@@ -13,7 +13,7 @@ uint32_t fr_get_u32(const uint8_t* p) {
 }
 
 int fr_encode_header(uint8_t* p, uint8_t t, uint32_t n) {
-    if (!p || t < FR_CHALLENGE || t > FR_CURSOR_PREFERENCE || n > FR_MAX_PAYLOAD)
+    if (!p || t < FR_CHALLENGE || t > FR_SCREEN_SCALE || n > FR_MAX_PAYLOAD)
         return 0;
     p[0] = 'F';
     p[1] = 'U';
@@ -28,7 +28,7 @@ int fr_encode_header(uint8_t* p, uint8_t t, uint32_t n) {
 
 int fr_decode_header(const uint8_t* p, fr_header* h) {
     if (!p || !h || p[0] != 'F' || p[1] != 'U' || p[2] != 'R' || p[3] != '1' || p[4] != 1 || p[6] || p[7] ||
-        p[5] < FR_CHALLENGE || p[5] > FR_CURSOR_PREFERENCE)
+        p[5] < FR_CHALLENGE || p[5] > FR_SCREEN_SCALE)
         return 0;
     h->type = p[5];
     h->length = fr_get_u32(p + 8);

@@ -24,7 +24,8 @@ enum fr_type {
     FR_FEEDBACK = 13,
     FR_APPROVAL = 14,
     FR_POINTER_SPEED = 15,
-    FR_CURSOR_PREFERENCE = 16
+    FR_CURSOR_PREFERENCE = 16,
+    FR_SCREEN_SCALE = 17
 };
 
 enum fr_session_action {

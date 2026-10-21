@@ -21,9 +21,12 @@ class VirtualDisplayController : public QObject {
     bool position(QPoint* position) const;
     bool setPosition(const QPoint& position);
     void ensure(bool portrait = false);
+    void setScalePercent(int percent);
     void release();
   signals:
     void ready(const QString& screenName);
+    void scaleApplied(int percent);
+    void scaleChanged();
     void status(const QString& chinese, const QString& english);
     void failed(const QString& chinese, const QString& english);
 
@@ -33,6 +36,10 @@ class VirtualDisplayController : public QObject {
     QElapsedTimer m_elapsed;
     unsigned m_releaseAttempts = 0;
     bool m_preparing = false, m_installing = false, m_portrait = false;
+    int m_scalePercent = 150;
+    bool m_scalePrepared = false;
+    QElapsedTimer m_scaleSettling;
+    void applyScale();
     QString m_qtName;
     void* m_installer = nullptr;
     void acquire();

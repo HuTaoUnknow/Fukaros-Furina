@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
-project(Fukaros VERSION 0.4.19 LANGUAGES C CXX)
+project(Fukaros VERSION 0.4.20 LANGUAGES C CXX)
 include(../cmake/ProjectDefaults.cmake)
 
 set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/forms")
-add_library(fukaros_display_native STATIC core/display/virtual_display.c)
+add_library(fukaros_display_native STATIC core/display/virtual_display.c core/display/display_scale.c)
+target_link_libraries(fukaros_display_native PUBLIC furina_protocol)
 set_target_properties(fukaros_display_native PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(fukaros_display_native PUBLIC core/display)
 if(WIN32)
@@ -31,6 +32,13 @@ add_library(fukaros_app STATIC
     ui/mainwindow_settings.cpp ui/mainwindow_session.cpp ui/mainwindow_video.cpp
     ui/forms/mainwindow.ui ui/forms/settings.ui
 )
+# Make changed forms an explicit input: a first incremental build must not
+# leave compiled window code using an older AUTOUIC header.
+set_source_files_properties(
+    ui/mainwindow.cpp ui/mainwindow_settings.cpp ui/mainwindow_session.cpp ui/mainwindow_video.cpp
+    PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ui/forms/settings.ui;${CMAKE_CURRENT_SOURCE_DIR}/ui/forms/mainwindow.ui"
+)
+
 target_include_directories(fukaros_app PUBLIC ui)
 target_link_libraries(fukaros_app PUBLIC fukaros_platform furina_video)
 

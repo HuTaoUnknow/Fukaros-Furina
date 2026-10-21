@@ -33,6 +33,7 @@ class Peer : public QObject {
     void sendApproval(quint32 id, quint32 verb, quint32 options);
     bool sendVideo(const QByteArray& packet);
     void sendProfile(int edge);
+    void sendScreenScale(int percent, quint64 revision, bool enabled = true);
     void sendPointerSpeed(int percent, quint64 revision);
     void sendCursorPreference(bool enabled, quint64 revision);
 
@@ -57,6 +58,9 @@ class Peer : public QObject {
     void approval(quint32 id, quint32 verb, quint32 options);
     void video(const QByteArray& packet);
     void profile(int edge);
+    void screenScaleAvailable();
+    void screenScale(int percent, quint64 revision);
+    void screenScalePreference(int percent, quint64 revision, bool enabled);
     void pointerSpeed(int percent, quint64 revision);
     void cursorPreference(bool enabled, quint64 revision);
     void cursorConnection(bool ready);
@@ -71,6 +75,8 @@ class Peer : public QObject {
     QElapsedTimer m_lastRx, m_session, m_backlog;
     QByteArray m_rx, m_challenge;
     QString m_token;
+    bool m_screenScaleSupported = false;
+    bool m_screenScaleToggleSupported = false;
     bool m_serverSide = false, m_ready = false, m_waitVideoKey = false;
     int m_pendingPings = 0;
     void attach(QTcpSocket* socket, bool server);

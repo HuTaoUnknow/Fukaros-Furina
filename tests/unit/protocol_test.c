@@ -52,6 +52,10 @@ int main(void) {
     CHECK(fr_valid_session_action(FR_RESTORED_CONFIRMED));
     CHECK(!fr_valid_session_action(0));
     CHECK(!fr_valid_session_action(12));
+    CHECK(fr_encode_header(h, FR_SCREEN_SCALE, 12));
+    CHECK(fr_decode_header(h, &decoded));
+    CHECK(decoded.type == FR_SCREEN_SCALE);
+    CHECK(!fr_encode_header(h, FR_SCREEN_SCALE + 1, 12));
     puts("Protocol, session requests and letterbox mapping passed");
     return 0;
 }

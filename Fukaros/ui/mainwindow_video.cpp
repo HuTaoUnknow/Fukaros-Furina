@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "screen_scale_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -324,6 +325,16 @@ void MainWindow::setupInput() {
     connect(&m_videoSender, &DesktopVideoSender::cursorShape, this, [this](const QByteArray& shape) {
         m_cursorStream->setShape(shape);
         updateCursorMapping();
+    });
+    auto* screenScale = new ScreenScaleSettings(&m_peer, this, true);
+    m_virtual.setScalePercent(screenScale->percent());
+    connect(screenScale, &ScreenScaleSettings::changed, &m_virtual,
+            &VirtualDisplayController::setScalePercent);
+    connect(&m_virtual, &VirtualDisplayController::scaleApplied, screenScale,
+            &ScreenScaleSettings::confirmApplied);
+    connect(&m_virtual, &VirtualDisplayController::scaleChanged, this, [this] {
+        if (m_sharing)
+            m_layoutRefresh.start();
     });
     auto* pointerSettings = new PointerSettings(&m_peer, this, true);
     m_independentCursor = pointerSettings->independentCursor();

@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "screen_scale_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -104,6 +105,7 @@ void MainWindow::initializeSettings() {
         s.setValue("token", QString::number(QRandomGenerator::system()->bounded(100000000, 999999999)));
     loadSettings();
     new PointerSettings(&m_peer, this, false);
+    new ScreenScaleSettings(&m_peer, this, false);
     connect(&m_peer, &Peer::cursor, this, [this](const QByteArray& data) {
         if (m_consent->active() && !m_consent->sharing())
             m_android.receiveCursor(data);

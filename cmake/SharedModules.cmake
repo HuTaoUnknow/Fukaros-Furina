@@ -3,6 +3,7 @@ get_filename_component(FURINA_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
 add_library(furina_protocol STATIC
     ${FURINA_ROOT}/core/protocol/furina_protocol.c
+    ${FURINA_ROOT}/core/protocol/screen_scale.c
     ${FURINA_ROOT}/core/protocol/video_policy.c
     ${FURINA_ROOT}/core/video/cursor_shape.c
 )
@@ -55,6 +56,8 @@ target_include_directories(furina_session PUBLIC ${FURINA_ROOT}/core/session)
 target_link_libraries(furina_session PUBLIC furina_transport furina_widgets)
 
 add_library(furina_settings STATIC
+    ${FURINA_ROOT}/core/settings/screen_scale_settings.cpp
+    ${FURINA_ROOT}/core/settings/screen_scale_settings.h
     ${FURINA_ROOT}/core/settings/pointer_settings.cpp
     ${FURINA_ROOT}/core/settings/pointer_settings.h
 )

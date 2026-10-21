@@ -1,3 +1,4 @@
+#include "screen_scale.h"
 #include "peer.h"
 #include <QMessageAuthenticationCode>
 #include <QRandomGenerator>
@@ -99,6 +100,8 @@ void Peer::close(bool graceful) {
     if (drain)
         send(FR_PING);
     m_ready = false;
+    m_screenScaleSupported = false;
+    m_screenScaleToggleSupported = false;
     if (m_socket) {
         auto* s = m_socket;
         m_socket = nullptr;
@@ -167,6 +170,8 @@ void Peer::attach(QTcpSocket* s, bool server) {
     m_socket = s;
     m_serverSide = server;
     m_ready = false;
+    m_screenScaleSupported = false;
+    m_screenScaleToggleSupported = false;
     m_pendingPings = 0;
     m_rx.clear();
     m_session.start();
@@ -194,6 +199,8 @@ void Peer::attach(QTcpSocket* s, bool server) {
         m_cursor.close();
         m_socket = nullptr;
         m_ready = false;
+        m_screenScaleSupported = false;
+        m_screenScaleToggleSupported = false;
         m_tick.stop();
         m_rx.clear();
         m_challenge.clear();
@@ -210,6 +217,8 @@ void Peer::attach(QTcpSocket* s, bool server) {
             m_cursor.close();
             m_socket = nullptr;
             m_ready = false;
+            m_screenScaleSupported = false;
+            m_screenScaleToggleSupported = false;
             m_tick.stop();
             m_rx.clear();
             emit disconnected();
@@ -280,6 +289,8 @@ void Peer::handle(quint8 t, const QByteArray& p) {
             m_ready = true;
             startCursor();
             send(FR_READY);
+            send(FR_STATUS, QByteArray("Furina capability: screen-scale-v2"));
+            send(FR_STATUS, QByteArray("Furina capability: screen-scale-v1"));
             emit connected();
             emit status(tr("Paired"));
             return;
@@ -287,6 +298,8 @@ void Peer::handle(quint8 t, const QByteArray& p) {
         if (!m_serverSide && t == FR_READY && p.isEmpty() && m_challenge.size() == 32) {
             m_ready = true;
             startCursor();
+            send(FR_STATUS, QByteArray("Furina capability: screen-scale-v2"));
+            send(FR_STATUS, QByteArray("Furina capability: screen-scale-v1"));
             emit connected();
             emit status(tr("Paired"));
             return;
@@ -317,6 +330,23 @@ void Peer::handle(quint8 t, const QByteArray& p) {
             return;
         }
         emit cursorPreference(value != 0, revision);
+        break;
+    }
+    case FR_SCREEN_SCALE: {
+        if (p.size() != 12 && p.size() != 16) {
+            fail("Invalid screen scale");
+            return;
+        }
+        const auto* data = reinterpret_cast<const uint8_t*>(p.constData());
+        const auto value = fr_get_u32(data);
+        const quint64 revision = (quint64(fr_get_u32(data + 4)) << 32) | fr_get_u32(data + 8);
+        const auto enabled = p.size() == 16 ? fr_get_u32(data + 12) : 1u;
+        if (!fr_screen_scale_valid(value) || revision > quint64(INT64_MAX) || enabled > 1) {
+            fail("Invalid screen scale");
+            return;
+        }
+        emit screenScale(enabled ? int(value) : 100, revision);
+        emit screenScalePreference(int(value), revision, enabled != 0);
         break;
     }
     case FR_POINTER_SPEED: {
@@ -396,6 +426,21 @@ void Peer::handle(quint8 t, const QByteArray& p) {
         if (p.size() > 4096) {
             fail(tr("Invalid status"));
             return;
+        }
+        if (p == "Furina capability: screen-scale-v2") {
+            if (!m_screenScaleToggleSupported) {
+                m_screenScaleSupported = true;
+                m_screenScaleToggleSupported = true;
+                emit screenScaleAvailable();
+            }
+            break;
+        }
+        if (p == "Furina capability: screen-scale-v1") {
+            if (!m_screenScaleSupported) {
+                m_screenScaleSupported = true;
+                emit screenScaleAvailable();
+            }
+            break;
         }
         emit status(QString::fromUtf8(p));
         break;
@@ -587,4 +632,17 @@ void Peer::sendCursorPreference(bool enabled, quint64 revision) {
     fr_put_u32(p + 4, revision >> 32);
     fr_put_u32(p + 8, uint32_t(revision));
     send(FR_CURSOR_PREFERENCE, QByteArray(reinterpret_cast<char*>(p), 12));
+}
+
+void Peer::sendScreenScale(int percent, quint64 revision, bool enabled) {
+    if (!m_ready || !m_screenScaleSupported || !fr_screen_scale_valid(percent) ||
+        revision > quint64(INT64_MAX))
+        return;
+    // v1 peers understand the effective scale only; never send them a larger packet.
+    uint8_t p[16];
+    fr_put_u32(p, m_screenScaleToggleSupported || enabled ? percent : 100);
+    fr_put_u32(p + 4, revision >> 32);
+    fr_put_u32(p + 8, uint32_t(revision));
+    fr_put_u32(p + 12, enabled ? 1 : 0);
+    send(FR_SCREEN_SCALE, QByteArray(reinterpret_cast<char*>(p), m_screenScaleToggleSupported ? 16 : 12));
 }

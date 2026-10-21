@@ -349,7 +349,10 @@ public final class VideoCore {
         MediaCodec codec;
         Surface output;
         int width, height, epoch, frames;
-        boolean waitKey = true, scheduled;
+        boolean waitKey = true, scheduled, flushNeeded;
+        volatile long warmingUntil;
+        String restartReason = "initial";
+        int restarts, overflows, queuePeak;
         final java.util.TreeMap<Long, Boolean> cursorModes = new java.util.TreeMap<>();
         long sample = SystemClock.elapsedRealtime(), workNs;
 
@@ -363,16 +366,26 @@ public final class VideoCore {
             if (!surfaceReady || packet == null || packet.length <= HEADER)
                 return;
             synchronized (queue) {
-                if (queue.size() >= 6) {
+                // Codec startup can briefly take longer than six frame intervals.
+                // Give it a bounded warm-up queue, then return to the low-latency limit.
+                int limit = SystemClock.elapsedRealtime() < warmingUntil ? 16 : 6;
+                if (queue.size() >= limit) {
+                    ++overflows;
+                    android.util.Log.i("FurinaVideo", "recovery reason=queue-overflow pending=" + queue.size());
                     queue.clear();
                     waitKey = true;
-                    handler.post(this::close);
-                    FurinaActivity.nativeNeedKey();
+                    // Recovery belongs to the decode loop. Posting close() here can
+                    // destroy a newly configured codec several times in succession.
+                    if (!flushNeeded) {
+                        flushNeeded = true;
+                        FurinaActivity.nativeNeedKey();
+                    }
                 }
                 if (waitKey && (ByteBuffer.wrap(packet).getInt() & KEY) == 0)
                     return;
                 waitKey = false;
                 queue.add(packet);
+                queuePeak = Math.max(queuePeak, queue.size());
                 schedule();
             }
         }
@@ -385,15 +398,18 @@ public final class VideoCore {
         }
 
         void surface(Surface surface) {
+            android.util.Log.i("FurinaVideo", "surface ready=" + (surface != null));
             surfaceReady = surface != null;
             handler.post(() -> {
                 handler.removeCallbacks(consumeTask);
                 close();
+                restartReason = "surface-change";
                 output = surface;
                 synchronized (queue) {
                     waitKey = true;
                     queue.clear();
                     scheduled = false;
+                    flushNeeded = false;
                 }
                 // Home destroys the Surface, not the approved peer session.
                 // Request fresh references only when a replacement is ready.
@@ -408,9 +424,11 @@ public final class VideoCore {
         void reset() {
             handler.post(() -> {
                 close();
+                restartReason = "session-reset";
                 synchronized (queue) {
                     queue.clear();
                     waitKey = true;
+                    flushNeeded = false;
                 }
                 frames = 0;
                 presented.set(0);
@@ -438,8 +456,12 @@ public final class VideoCore {
                     return;
                 }
                 byte[] packet;
+                boolean recover;
                 synchronized (queue) {
                     packet = queue.peek();
+                    recover = packet != null && flushNeeded;
+                    if (packet != null)
+                        flushNeeded = false;
                 }
                 if (packet == null) {
                     drain();
@@ -461,6 +483,8 @@ public final class VideoCore {
                 long pts = header.getLong();
                 int e = header.getInt();
                 if (codec == null || epoch != e) {
+                    if (codec != null)
+                        restartReason = "stream-epoch " + epoch + "->" + e;
                     if ((flags & KEY) == 0) {
                         synchronized (queue) {
                             if (queue.peek() == packet)
@@ -472,6 +496,7 @@ public final class VideoCore {
                         return;
                     }
                     close();
+                    warmingUntil = SystemClock.elapsedRealtime() + 1000;
                     String name = findCodec(false, w, h);
                     if (name == null)
                         throw new IllegalStateException("No hardware decoder supporting " + w + "x" + h +
@@ -492,9 +517,12 @@ public final class VideoCore {
                         }
                     }, handler);
                     codec.start();
+                    warmingUntil = SystemClock.elapsedRealtime() + 250;
                     width = w;
                     height = h;
                     epoch = e;
+                    android.util.Log.i("FurinaVideo", "decoder-start count=" + (++restarts) +
+                        " reason=" + restartReason + " epoch=" + e + " size=" + w + "x" + h);
                     FurinaActivity.nativeStatus(
                         "安卓 H.264 硬件解码：解码器 " + name + "，分辨率 " + w + "×" + h +
                         " 像素，目标帧率 60 帧/秒\nEN: Android hardware H.264 decoding: codec " + name +
@@ -502,6 +530,12 @@ public final class VideoCore {
                     FurinaActivity a = FurinaActivity.currentActivity();
                     if (a != null)
                         a.runOnUiThread(VideoCore::fit);
+                } else if (recover) {
+                    // Compressed references were dropped: flush once, then resume
+                    // from the queued keyframe (which carries fresh SPS/PPS).
+                    codec.flush();
+                    cursorModes.clear();
+                    android.util.Log.i("FurinaVideo", "decoder-flush reason=queue-overflow epoch=" + epoch);
                 }
                 long start = System.nanoTime();
                 int index = codec.dequeueInputBuffer(0);
@@ -530,12 +564,15 @@ public final class VideoCore {
                     }
                 }
             } catch (Exception e) {
+                restartReason = "decode-error";
+                android.util.Log.e("FurinaVideo", "decode-error", e);
                 FurinaActivity.nativeStatus("视频解码失败：" + e);
                 close();
                 synchronized (queue) {
                     queue.clear();
                     waitKey = true;
                     scheduled = false;
+                    flushNeeded = false;
                 }
                 FurinaActivity.nativeNeedKey();
             }
@@ -574,6 +611,10 @@ public final class VideoCore {
                 int count = presented.getAndSet(0), pending;
                 synchronized (queue) {
                     pending = queue.size();
+                    android.util.Log.i("FurinaVideo", "sample decoded=" + (frames * 1000.0 / elapsed) +
+                        " shown=" + (count * 1000.0 / elapsed) + " pending=" + pending +
+                        " peak=" + queuePeak + " overflows=" + overflows + " restarts=" + restarts);
+                    queuePeak = 0;
                 }
                 if (codec != null)
                     FurinaActivity.nativeVideoStats(

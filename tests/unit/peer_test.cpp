@@ -83,6 +83,9 @@ class PeerTest : public QObject {
         auto newest = fr_cursor_position(2, 3, 1200, 1920, true);
         sender.send(newest);
         QTRY_VERIFY(sender.isReady() && receiver.isReady());
+        for (auto* socket : owner.findChildren<QTcpSocket*>())
+            if (socket->state() == QAbstractSocket::ConnectedState)
+                QCOMPARE(socket->socketOption(QAbstractSocket::LowDelayOption).toInt(), 1);
         QTRY_COMPARE(delivered, 1);
         QCOMPARE(last, newest);
         sender.close();
@@ -153,6 +156,16 @@ class PeerTest : public QObject {
         QTRY_VERIFY(server.ready());
         QTRY_VERIFY(raw.bytesAvailable() >= FR_HEADER_SIZE);
         raw.read(FR_HEADER_SIZE);
+        // New features advertise over the legacy-compatible status packet.
+        for (const auto version : {"v2", "v1"}) {
+            QTRY_VERIFY(raw.bytesAvailable() >= FR_HEADER_SIZE);
+            fr_header capabilities{};
+            const auto capabilityHeader = raw.read(FR_HEADER_SIZE);
+            QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(capabilityHeader.constData()), &capabilities));
+            QCOMPARE(capabilities.type, quint8(FR_STATUS));
+            QTRY_VERIFY(raw.bytesAvailable() >= capabilities.length);
+            QCOMPARE(raw.read(capabilities.length), QByteArray("Furina capability: screen-scale-") + version);
+        }
         QTRY_VERIFY_WITH_TIMEOUT(raw.bytesAvailable() >= FR_HEADER_SIZE, 4000);
         fr_header ping{};
         const auto earlier = raw.read(FR_HEADER_SIZE);

@@ -53,6 +53,28 @@ class UiTest : public QObject {
     Q_OBJECT
   private slots:
 
+    void scaleToggleIsBelowIndependentCursor() {
+        MainWindow w;
+        w.show();
+        w.findChild<QPushButton*>("settings")->click();
+        QTest::qWait(25);
+        auto* toggle = w.findChild<QCheckBox*>("screenScaleEnabled");
+        auto* cursor = w.findChild<QCheckBox*>("independentCursor");
+        auto* scale = w.findChild<QComboBox*>("screenScale");
+        QVERIFY(toggle && cursor && scale);
+        QCOMPARE(toggle->text(), QString("副屏放大"));
+        QVERIFY(toggle->mapTo(&w, QPoint()).y() > cursor->mapTo(&w, QPoint()).y());
+        const int saved = scale->currentIndex();
+        toggle->setChecked(false);
+        QVERIFY(!scale->isEnabled());
+        QCOMPARE(scale->currentIndex(), saved);
+        toggle->setChecked(true);
+        QVERIFY(scale->isEnabled());
+        QCOMPARE(scale->currentIndex(), saved);
+    }
+
+
+
     void fullscreenStateRequiresReceiverConfirmation() {
         MainWindow w;
         w.show();

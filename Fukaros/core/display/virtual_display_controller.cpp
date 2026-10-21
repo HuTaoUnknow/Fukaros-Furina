@@ -1,4 +1,6 @@
 #include "virtual_display_controller.h"
+#include "display_scale.h"
+#include "screen_scale.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QFileInfo>
@@ -66,6 +68,7 @@ void VirtualDisplayController::ensure(bool portrait) {
         }
     }
     m_preparing = true;
+    m_scalePrepared = false;
     m_portrait = portrait;
     m_elapsed.restart();
     if (available()) {
@@ -168,6 +171,15 @@ void VirtualDisplayController::poll() {
         const bool correctOrientation = (geometry.height() > geometry.width()) == m_portrait;
         if (match && correctOrientation && screen != QGuiApplication::primaryScreen() &&
             geometry.width() > 0) {
+            if (!m_scalePrepared) {
+                m_scalePrepared = true;
+                applyScale();
+                m_scaleSettling.restart();
+                return;
+            }
+            // Let Qt process per-monitor DPI / geometry notifications before capture binds.
+            if (m_scaleSettling.elapsed() < 250)
+                return;
             m_qtName = screen->name();
             m_preparing = false;
             m_poll.stop();
@@ -181,6 +193,7 @@ void VirtualDisplayController::poll() {
 
 void VirtualDisplayController::release() {
     m_preparing = false;
+    m_scalePrepared = false;
     m_poll.stop();
     m_qtName.clear();
 #ifdef Q_OS_WIN
@@ -193,6 +206,45 @@ void VirtualDisplayController::release() {
     m_releaseRetry.stop();
     m_releaseAttempts = 0;
     finishRelease();
+}
+
+void VirtualDisplayController::setScalePercent(int percent) {
+    if (!fr_screen_scale_valid(percent) || percent == m_scalePercent)
+        return;
+    m_scalePercent = percent;
+    if (m_preparing) {
+        m_scalePrepared = false;
+    } else if (m_display.acquired && !m_qtName.isEmpty() && QGuiApplication::platformName() != "offscreen") {
+        applyScale();
+    }
+}
+
+void VirtualDisplayController::applyScale() {
+    int actual = 0;
+    const int requested = m_scalePercent;
+    const long error = fr_virtual_set_scale(&m_display, requested, &actual);
+    if (error) {
+        if (fr_screen_scale_valid(actual)) {
+            m_scalePercent = actual;
+            emit scaleApplied(actual);
+        }
+        emit status(
+            QString("副屏屏幕放大比例 %1% 未应用，%2错误码 %3。可在 Windows 显示设置检查支持的比例。")
+                .arg(requested)
+                .arg(actual ? QString("保留实际比例 %1%，").arg(actual) : QString())
+                .arg(error),
+            QString(
+                "Secondary display scale %1% was not applied; actual %2%, error %3. Check supported scales in Windows display settings.")
+                .arg(requested)
+                .arg(actual)
+                .arg(error));
+        return;
+    }
+    emit scaleApplied(actual);
+    emit scaleChanged();
+    emit status(
+        QString("副屏屏幕放大比例已设为 %1%，文字和界面随副屏缩放，主屏保持不变。").arg(actual),
+        QString("Secondary display scale is %1%; text and UI scale on the extension only.").arg(actual));
 }
 
 void VirtualDisplayController::finishRelease() {

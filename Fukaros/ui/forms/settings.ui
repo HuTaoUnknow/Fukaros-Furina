@@ -121,7 +121,7 @@
          <property name="title"><string>通用设置</string></property>
          <layout class="QVBoxLayout" name="generalLayout">
  <item><layout class="QHBoxLayout" name="pointerLayout">
-          <item><widget class="QLabel" name="pointerLabel"><property name="text"><string>副屏为主屏的</string></property></widget></item>
+          <item><widget class="QLabel" name="pointerLabel"><property name="text"><string>副屏鼠标移速倍率</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
           <item><widget class="QDoubleSpinBox" name="pointerMultiplier">
            <property name="minimum"><double>0.250000000000000</double></property>
            <property name="maximum"><double>4.000000000000000</double></property>
@@ -135,12 +135,24 @@
            <property name="spacing"><number>0</number></property>
            <item><spacer name="pointerHelpSpring"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>16</height></size></property></spacer></item>
            <item><widget class="StepHelpButton" name="pointerHelp">
-            <property name="helpTitle" stdset="0"><string>分屏鼠标速率</string></property>
+            <property name="helpTitle" stdset="0"><string>副屏鼠标移速倍率</string></property>
             <property name="steps" stdset="0"><string>1. 主屏沿用当前系统鼠标速率。
 2. 副屏按此倍率调整：1 倍相同，2 倍更快，0.5 倍更慢。
 3. 修改立即保存，连接后双端同步，投屏时也可调整。
 4. 仅作用于电脑鼠标在扩展屏内的移动；停止扩展后恢复。</string></property>
            </widget></item>
+          </layout></item>
+         </layout></item>
+         <item><layout class="QHBoxLayout" name="screenScaleRow">
+          <item><widget class="QLabel" name="screenScaleLabel"><property name="text"><string>副屏屏幕放大比例</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><widget class="FurinaComboBox" name="screenScale"><property name="minimumSize"><size><width>120</width><height>36</height></size></property><property name="currentIndex"><number>2</number></property><item><property name="text"><string>100%</string></property></item><item><property name="text"><string>125%</string></property></item><item><property name="text"><string>150%</string></property></item><item><property name="text"><string>175%</string></property></item><item><property name="text"><string>200%</string></property></item><item><property name="text"><string>225%</string></property></item><item><property name="text"><string>250%</string></property></item><item><property name="text"><string>300%</string></property></item></widget></item>
+          <item><layout class="QVBoxLayout" name="screenScaleHelpLayout"><property name="spacing"><number>0</number></property>
+           <item><spacer name="screenScaleHelpSpring"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>16</height></size></property></spacer></item>
+           <item><widget class="StepHelpButton" name="screenScaleHelp"><property name="helpTitle" stdset="0"><string>副屏屏幕放大比例</string></property><property name="steps" stdset="0"><string>1. 勾选“副屏放大”后应用所选比例，默认 150%。关闭后恢复 100%，保留所选比例，重新开启后恢复。
+2. 使用 Windows 显示缩放，保留桌面分辨率，不裁切画面。主屏比例不变。
+3. 修改立即保存并双端同步；扩展开始后自动应用，投屏期间也可调整。
+4. 仅电脑向移动端扩展桌面生效；复制与移动端投电脑不改变原屏比例。
+5. 若 Windows 不支持所选档位，保留实际比例并在调试信息中提示。</string></property></widget></item>
           </layout></item>
          </layout></item>
          <item><widget class="QFrame" name="cursorSeparator"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
@@ -154,6 +166,7 @@
 4. 适用于电脑向移动端投屏。反色图案在独立模式中以黑白轮廓显示。</string></property></widget></item>
           </layout></item>
          </layout></item>
+         <item><widget class="QCheckBox" name="screenScaleEnabled"><property name="text"><string>副屏放大</string></property><property name="checked"><bool>true</bool></property></widget></item>
          </layout>
         </widget>
        </item>

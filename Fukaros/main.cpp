@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("Furina");
     QCoreApplication::setApplicationName("Fukaros");
-    QCoreApplication::setApplicationVersion("0.4.19");
+    QCoreApplication::setApplicationVersion("0.4.20");
     SingleInstance instance(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
     const auto result = instance.start();
     if (result == SingleInstance::Activated)

@@ -21,6 +21,9 @@ class CursorTransport {
     quint16 m_port = 0;
 
     void ready(QTcpSocket* s) {
+        // Native socket options cannot be applied before connectToHost creates
+        // the client socket; also cover authenticated reconnects here.
+        s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
         m_socket = s;
         m_ready = true;
         m_shapeDirty = !m_shape.isEmpty();
@@ -60,7 +63,8 @@ class CursorTransport {
         m_candidates.append(s);
         s->setParent(m_owner);
         s->setProxy(QNetworkProxy::NoProxy);
-        s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+        if (accepted)
+            s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
         s->setReadBufferSize(1024 * 1024 + 64);
         QObject::connect(s, &QTcpSocket::readyRead, m_owner, [this, s, in, accepted] {
             in->bytes += s->readAll();
@@ -145,7 +149,10 @@ class CursorTransport {
                 s->abort();
         });
         if (!accepted)
-            QObject::connect(s, &QTcpSocket::connected, m_owner, [this, s] { s->write(m_key); });
+            QObject::connect(s, &QTcpSocket::connected, m_owner, [this, s] {
+                s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+                s->write(m_key);
+            });
     }
 
     void connectClient() {
