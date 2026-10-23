@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "cast_direction_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -75,6 +76,7 @@ void MainWindow::directionChanged() {
         m_castUi->preserveSelection();
         return;
     }
+    furinaSaveCastDirection(m_direction->sharing());
     ui->modePanel->setVisible(ui->receive->isChecked());
     m_videoVisible = false;
     m_android.resetVideo();

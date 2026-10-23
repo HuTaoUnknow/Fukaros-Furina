@@ -1,16 +1,16 @@
 # Fukaros + Furina
 
-Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前稳定版为 **v0.4.19**，主分支源码版本为 **0.4.20**。
+Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前配套稳定版为 **v0.4.20**。
 
-开发版 **0.4.20** 新增双端同步的“副屏放大”开关与比例（默认开启、150%，仅扩展桌面），完善“副屏鼠标移速倍率”命名，并修复安卓解码积压反复重建及独立鼠标通道低延迟设置。当前同步源码，稳定安装包仍为 0.4.19。详见 [0.4.20 更新说明](docs/UPDATE-0.4.20.md)。
+v0.4.20 新增双端投屏方向记忆、同步的“副屏放大”开关与比例（默认开启、150%，仅扩展桌面），并修复安卓解码积压反复重建及独立鼠标通道低延迟设置。详见 [0.4.20 更新说明](docs/UPDATE-0.4.20.md)。
 
 ## 下载
 
-在 [v0.4.19 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.19) 下载并同时更新两端：
+在 [v0.4.20 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.20) 下载并同时更新两端：
 
-- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.19/Fukaros-0.4.19-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
-- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.19/Furina-0.4.19-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
-- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.19.md)。当前为稳定版本；详细测试范围见 [发布验证](docs/VALIDATION.md)。
+- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.20/Fukaros-0.4.20-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
+- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.20/Furina-0.4.20-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
+- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.20.md)。当前为稳定版本；详细测试范围见 [发布验证](docs/VALIDATION.md)。
 
 ## 功能
 
@@ -20,6 +20,7 @@ Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项�
 - **画质与方向**：1920 / 1080 / 720 / 自动档，数字为最长边像素，目标 60 FPS。竖屏扩展为 1200×1920，横屏为 1920×1200；扩展期间锁定方向，停止后恢复旋转。
 - **独立鼠标**：默认开启，鼠标位置与图案通过独立认证通道传输；可切回视频合成模式。副屏鼠标速率可设为主屏的 0.25–4 倍，双端同步，主屏系统速率保持不变。
 - **会话同步**：双端停止同步释放会话；停止后移除虚拟扩展屏。放大 / 还原由接收端回传状态确认，按钮跟随实际状态。
+- **方向记忆**：两端分别保存分享／获取屏幕的选择，重新打开后恢复；安卓进入后台时也会保存，恢复后仍须手动开始并由对端同意。
 - **日常使用**：电脑端单实例、关闭到托盘；移动端提供横竖屏布局，支持系统返回退出全屏、回到桌面后恢复投屏。调试信息按时间戳显示中英双语。
 
 ## 快速开始

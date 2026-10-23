@@ -56,6 +56,7 @@ target_include_directories(furina_session PUBLIC ${FURINA_ROOT}/core/session)
 target_link_libraries(furina_session PUBLIC furina_transport furina_widgets)
 
 add_library(furina_settings STATIC
+    ${FURINA_ROOT}/core/settings/cast_direction_settings.h
     ${FURINA_ROOT}/core/settings/screen_scale_settings.cpp
     ${FURINA_ROOT}/core/settings/screen_scale_settings.h
     ${FURINA_ROOT}/core/settings/pointer_settings.cpp

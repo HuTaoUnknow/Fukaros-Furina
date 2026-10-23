@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "cast_direction_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -141,6 +142,7 @@ void MainWindow::directionChanged() {
         m_castUi->preserveSelection();
         return;
     }
+    furinaSaveCastDirection(m_direction->sharing());
     ui->modePanel->setVisible(ui->share->isChecked());
     m_view->setInteractive(ui->receive->isChecked());
     if (m_sessionActive || m_pending || m_consent->pending())

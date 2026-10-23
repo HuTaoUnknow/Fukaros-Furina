@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "cast_direction_settings.h"
 #include "screen_scale_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
@@ -31,6 +32,7 @@ void MainWindow::loadSettings() {
 }
 
 void MainWindow::saveSettings() {
+    furinaSaveCastDirection(m_direction->sharing());
     QSettings s;
     s.setValue("resolution", m_resolution->value());
     s.setValue("connectionTab", cfg->connectionTabs->currentIndex());
@@ -92,6 +94,8 @@ void MainWindow::initializeSettings() {
     });
 #endif
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+        if (state != Qt::ApplicationActive)
+            furinaSaveCastDirection(m_direction->sharing());
         setUpdatesEnabled(state != Qt::ApplicationSuspended);
         if (state == Qt::ApplicationActive) {
             m_nativeRect = {};

@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "cast_direction_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -18,6 +19,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), cfg(new Ui::SettingsDialog), m_settings(new QDialog(this)),
       m_peer(this), m_adb(this), m_usbNetwork(this) {
     setupInterface();
+    m_direction->setSharing(furinaRestoreCastDirection(m_direction->sharing()));
     connectSessionEvents();
     connectVideoEvents();
     loadSettings();
@@ -32,8 +34,8 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
-    stop();
     saveSettings();
+    stop();
     disconnect(&m_virtual, nullptr, this, nullptr);
     delete m_cursorStream;
     delete cfg;
@@ -103,6 +105,8 @@ void MainWindow::setupInterface() {
 }
 
 void MainWindow::connectActions() {
+    connect(qApp, &QCoreApplication::aboutToQuit, this,
+            [this] { furinaSaveCastDirection(m_direction->sharing()); });
     connect(m_castControl, &CastControl::startRequested, this, &MainWindow::start);
     connect(m_castControl, &CastControl::stopRequested, this, &MainWindow::stop);
     connect(ui->settings, &QPushButton::clicked, this, &MainWindow::openSettings);
@@ -113,8 +117,8 @@ void MainWindow::connectActions() {
     auto* tray = new DesktopTray(this, windowIcon());
     connect(tray, &DesktopTray::hiddenToTray, this, &MainWindow::saveSettings);
     connect(tray, &DesktopTray::quitRequested, this, [this] {
-        stop();
         saveSettings();
+        stop();
         QCoreApplication::quit();
     });
     connect(m_settings, &QDialog::accepted, this, [this] {

@@ -148,6 +148,45 @@ class UiTest : public QObject {
         QVERIFY(entry.section('\n', 1).endsWith(english));
     }
 
+    void init() {
+        QSettings().remove("castDirection");
+    }
+
+    void directionSurvivesWindowDestruction_data() {
+        QTest::addColumn<bool>("sharing");
+        QTest::newRow("share") << true;
+        QTest::newRow("receive") << false;
+    }
+
+    void directionSurvivesWindowDestruction() {
+        QFETCH(bool, sharing);
+        {
+            MainWindow window;
+            window.findChild<QCheckBox*>(sharing ? "share" : "receive")->setChecked(true);
+            // Require destruction itself to persist the currently selected value.
+            QSettings().remove("castDirection");
+        }
+        QCOMPARE(QSettings().value("castDirection").toString(),
+                 sharing ? QString("share") : QString("receive"));
+        MainWindow restored;
+        QCOMPARE(restored.findChild<DirectionChoice*>()->sharing(), sharing);
+        QCOMPARE(restored.findChild<QCheckBox*>("receive")->isChecked(), !sharing);
+        QCOMPARE(!restored.findChild<QWidget*>("modePanel")->isHidden(), sharing);
+        QVERIFY(!restored.findChild<CastUiState*>()->locked());
+        QVERIFY(!restored.findChild<SessionConsent*>()->active());
+        QVERIFY(!restored.findChild<Peer*>()->ready());
+        // Canceling connection settings must not revert a direction selection.
+        restored.findChild<QDialog*>("SettingsDialog")->reject();
+        QCOMPARE(restored.findChild<DirectionChoice*>()->sharing(), sharing);
+    }
+
+    void invalidDirectionUsesFormDefault() {
+        QSettings().setValue("castDirection", "invalid-direction");
+        MainWindow window;
+        QVERIFY(window.findChild<QCheckBox*>("receive")->isChecked());
+        QVERIFY(!window.findChild<QCheckBox*>("share")->isChecked());
+    }
+
     void initTestCase() {
         QCoreApplication::setOrganizationName("FurinaTests");
         QCoreApplication::setApplicationName("FukarosUi60");

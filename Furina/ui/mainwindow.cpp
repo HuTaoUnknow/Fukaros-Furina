@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "cast_direction_settings.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -16,6 +17,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), cfg(new Ui::SettingsDialog), m_settings(new QDialog(this)),
       m_peer(this), m_discovery(this), m_android(this) {
     setupInterface();
+    m_direction->setSharing(furinaRestoreCastDirection(m_direction->sharing()));
     connectSessionEvents();
     connectVideoEvents();
     initializeSettings();
@@ -32,8 +34,8 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow() {
     m_tick.stop();
-    stop();
     saveSettings();
+    stop();
     delete cfg;
     delete ui;
 }
@@ -98,6 +100,8 @@ void MainWindow::setupInterface() {
 }
 
 void MainWindow::connectActions() {
+    connect(qApp, &QCoreApplication::aboutToQuit, this,
+            [this] { furinaSaveCastDirection(m_direction->sharing()); });
     connect(m_castControl, &CastControl::startRequested, this, &MainWindow::start);
     connect(m_castControl, &CastControl::stopRequested, this, &MainWindow::stop);
     connect(ui->settings, &QPushButton::clicked, this, &MainWindow::openSettings);
