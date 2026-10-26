@@ -107,6 +107,11 @@ void Presentation::setActive(bool on) {
         m_sidebar->show();
         m_controls->show();
 #ifdef Q_OS_WIN
+        // Qt restores the native style saved on entry when leaving fullscreen.
+        // Clear that state before restoring our flags, otherwise its saved
+        // frameless style overwrites the caption and resize frame again.
+        m_window->hide();
+        m_window->setWindowState(Qt::WindowNoState);
         m_window->setWindowFlags(m_windowFlags);
 #endif
         if (m_wasMaximized)

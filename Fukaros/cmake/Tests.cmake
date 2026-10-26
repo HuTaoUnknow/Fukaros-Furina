@@ -42,6 +42,10 @@ target_link_libraries(pointer_settings_test PRIVATE furina_settings)
 furina_offscreen_test(pointer_settings)
 
 if(WIN32)
+    furina_test(presentation_test presentation tests/unit/presentation_test.cpp)
+    target_link_libraries(presentation_test PRIVATE furina_widgets user32)
+    set_tests_properties(presentation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows" RUN_SERIAL TRUE)
+
     furina_test(virtual_driver_test virtual_driver_package tests/unit/virtual_driver_test.cpp)
     add_dependencies(virtual_driver_test Fukaros virtual_display_helper)
     add_executable(cursor_test ${FURINA_ROOT}/tests/unit/cursor_test.cpp)
