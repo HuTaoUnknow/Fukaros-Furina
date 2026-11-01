@@ -13,13 +13,14 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("Furina");
     QCoreApplication::setApplicationName("Fukaros");
-    QCoreApplication::setApplicationVersion("0.4.20");
+    QCoreApplication::setApplicationVersion("0.4.20_ZT");
+    QApplication::setApplicationDisplayName("Fukaros_ZT");
     SingleInstance instance(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
     const auto result = instance.start();
     if (result == SingleInstance::Activated)
         return 0;
     if (result == SingleInstance::Error) {
-        QMessageBox::warning(nullptr, "Fukaros", "无法唤起已有窗口，请稍后重试。\n" + instance.errorString());
+        QMessageBox::warning(nullptr, "Fukaros_ZT", "无法唤起已有窗口，请稍后重试。\n" + instance.errorString());
         return 1;
     }
     furinaMigrateSettings("white_furina");

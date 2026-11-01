@@ -36,6 +36,67 @@ class UiTest : public QObject {
     Q_OBJECT
   private slots:
 
+    void collapsibleBottomPanel() {
+        MainWindow w;
+        w.resize(1100, 760);
+        w.show();
+        QTest::qWait(30);
+        auto* toggle = w.findChild<QPushButton*>("collapse");
+        auto* bottom = w.findChild<QWidget*>("bottomPanel");
+        auto* view = w.findChild<ScreenView*>();
+        auto* presentation = w.findChild<Presentation*>();
+        QVERIFY(toggle && bottom && view && presentation);
+        QVERIFY(!toggle->isChecked());
+        QVERIFY(bottom->isVisible());
+        QVERIFY(toggle->mapTo(&w, QPoint()).y() < w.findChild<QPushButton*>("settings")->mapTo(&w, QPoint()).y());
+        const auto down = toggle->icon().pixmap(22, 22).toImage();
+        const int expandedHeight = view->height();
+        w.grab().save("zt-expanded-Furina.png");
+        toggle->click();
+        QTRY_VERIFY(bottom->isHidden());
+        QTRY_VERIFY(view->height() > expandedHeight);
+        QVERIFY(toggle->icon().pixmap(22, 22).toImage() != down);
+        QCOMPARE(toggle->toolTip(), QString("展开投屏方向和调试信息"));
+        w.grab().save("zt-collapsed-Furina.png");
+        w.resize(480, 900);
+        QTest::qWait(30);
+        QVERIFY(bottom->isHidden());
+        QVERIFY(toggle->isVisible());
+        w.grab().save("zt-portrait-collapsed-Furina.png");
+        presentation->setActive(true);
+        presentation->setActive(false);
+        QTest::qWait(30);
+        QVERIFY(bottom->isHidden());
+        QVERIFY(toggle->isChecked());
+        toggle->click();
+        QTRY_VERIFY(bottom->isVisible());
+        QCOMPARE(toggle->toolTip(), QString("收起投屏方向和调试信息"));
+        w.resize(1100, 760);
+        QTest::qWait(30);
+        QVERIFY(w.findChild<QWidget*>("directionPanel")->isVisible());
+        QVERIFY(w.findChild<QWidget*>("debugPanel")->isVisible());
+    }
+
+    void incomingConsentExpandsCollapsedPanel() {
+        MainWindow w;
+        w.show();
+        auto* peer = w.findChild<Peer*>();
+        Peer other;
+        QVERIFY(other.listen(29986, "zt-panel-test", "127.0.0.1"));
+        peer->connectTo("127.0.0.1", 29986, "zt-panel-test");
+        QTRY_VERIFY(peer->ready() && other.ready());
+        auto* toggle = w.findChild<QPushButton*>("collapse");
+        toggle->click();
+        QVERIFY(w.findChild<QWidget*>("bottomPanel")->isHidden());
+        other.sendApproval(7392, FR_APPROVAL_REQUEST, FR_APPROVAL_RECEIVE);
+        QTRY_VERIFY(w.findChild<SessionConsent*>()->pending());
+        QTRY_VERIFY(!toggle->isChecked());
+        QVERIFY(w.findChild<QWidget*>("bottomPanel")->isVisible());
+        QVERIFY(w.findChild<QPushButton*>("consentAccept")->isVisible());
+        w.findChild<QPushButton*>("consentReject")->click();
+    }
+
+
     void scaleToggleIsBelowIndependentCursor() {
         MainWindow w;
         w.show();

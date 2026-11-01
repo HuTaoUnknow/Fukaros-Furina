@@ -8,7 +8,7 @@
 namespace {
 class ToolIconEngine final : public QIconEngine {
   public:
-    enum Kind { Gear, Maximize, Restore, WindowMinimize, WindowMaximize, WindowRestore, WindowClose };
+    enum Kind { Gear, Maximize, Restore, ChevronDown, ChevronUp, WindowMinimize, WindowMaximize, WindowRestore, WindowClose };
 
     explicit ToolIconEngine(Kind kind) : m_kind(kind) {}
 
@@ -51,6 +51,12 @@ class ToolIconEngine final : public QIconEngine {
             painter->setPen(Qt::NoPen);
             painter->setBrush(color);
             painter->drawPath(gear);
+        } else if (m_kind == ChevronDown || m_kind == ChevronUp) {
+            painter->setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter->setBrush(Qt::NoBrush);
+            const bool up = m_kind == ChevronUp;
+            painter->drawPolyline(QPolygonF{QPointF(5, up ? 15 : 9), QPointF(12, up ? 8 : 16),
+                                            QPointF(19, up ? 15 : 9)});
         } else if (m_kind >= WindowMinimize) {
             painter->setPen(QPen(color, 1.6, Qt::SolidLine, Qt::SquareCap));
             painter->setBrush(Qt::NoBrush);
@@ -115,6 +121,20 @@ void furinaConfigureToolIcons(QPushButton* settings, QPushButton* maximize) {
     settings->setIcon(QIcon(new ToolIconEngine(ToolIconEngine::Gear)));
     settings->setIconSize(QSize(22, 22));
     furinaSetMaximizeIcon(maximize, false);
+}
+
+void furinaConfigurePanelToggle(QPushButton* button) {
+    button->setCheckable(true);
+    button->setText({});
+    button->setIconSize(QSize(22, 22));
+    const auto refresh = [button](bool collapsed) {
+        button->setToolTip(collapsed ? "展开投屏方向和调试信息" : "收起投屏方向和调试信息");
+        button->setAccessibleName(button->toolTip());
+        button->setIcon(QIcon(new ToolIconEngine(collapsed ? ToolIconEngine::ChevronUp
+                                                         : ToolIconEngine::ChevronDown)));
+    };
+    QObject::connect(button, &QPushButton::toggled, button, refresh);
+    refresh(button->isChecked());
 }
 
 WindowControls::WindowControls(QMainWindow* window, Presentation* presentation, ScreenView* view,

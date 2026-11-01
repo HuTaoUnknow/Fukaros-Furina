@@ -19,6 +19,6 @@ class MobileLayout final : public QObject {
     QBoxLayout *m_sideLayout, *m_toolLayout, *m_contentLayout, *m_bottomLayout, *m_debugLayout,
         *m_consentLayout;
     QCheckBox *m_modes, *m_logs;
-    QPushButton *m_start, *m_settings, *m_maximize;
+    QPushButton *m_start, *m_collapse, *m_settings, *m_maximize;
     bool m_portrait = false, m_initialized = false, m_arranging = false, m_fullscreen = false;
 };

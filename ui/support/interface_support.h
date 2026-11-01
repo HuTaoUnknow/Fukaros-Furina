@@ -10,6 +10,7 @@
 #include "screenview.h"
 QString furinaStyle();
 void furinaConfigureToolIcons(QPushButton* settings, QPushButton* maximize);
+void furinaConfigurePanelToggle(QPushButton* button);
 void furinaSetMaximizeIcon(QPushButton* button, bool restore);
 
 class DirectionChoice : public QObject {
@@ -73,6 +74,7 @@ class Presentation : public QObject {
     }
 
     void setActive(bool on);
+    void setControlsCollapsed(bool collapsed);
   signals:
     void changed(bool active);
 
@@ -85,6 +87,7 @@ class Presentation : public QObject {
     ScreenView* m_view;
     QPushButton* m_exit = nullptr;
     bool m_active = false, m_wasMaximized = false;
+    bool m_controlsCollapsed = false;
     QRect m_geometry;
 #ifdef Q_OS_WIN
     Qt::WindowFlags m_windowFlags;

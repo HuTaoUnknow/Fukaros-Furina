@@ -1,16 +1,22 @@
 # Fukaros + Furina
 
-Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前配套稳定版为 **v0.4.20**。
+Windows 电脑与 Android 手机 / 平板之间的 USB / Wi-Fi 双向投屏项目。电脑端 **Fukaros** 与移动端 **Furina** 在同一仓库维护，当前为 **v0.4.20_ZT** 收纳界面分支版，基于稳定版 v0.4.20。
 
 v0.4.20 新增双端投屏方向记忆、同步的“副屏放大”开关与比例（默认开启、150%，仅扩展桌面），并修复安卓解码积压反复重建及独立鼠标通道低延迟设置。2026-10-26 同版本覆盖更新，加入 Windows 退出全屏后标题栏恢复修复。详见 [0.4.20 更新说明](docs/UPDATE-0.4.20.md)。
 
+## _ZT 分支
+
+两端左侧设置按钮上方增加收纳按钮：底部“投屏方向”和“调试信息”展开时显示向下尖号，收起后显示向上尖号。收起后投屏区域自动扩展，横竖屏切换和退出全屏保留当前收纳状态；新投屏请求到达时会展开以显示确认操作。
+
+应用显示名称为 **Fukaros_ZT / Furina_ZT**，版本为 **0.4.20_ZT**。包保留原应用身份与签名，可覆盖现有安装并沿用设置；GitHub 主线及稳定版发布保持原样。详见 [ZT 更新说明](docs/UPDATE-0.4.20_ZT.md) 和 [本轮验证记录](docs/VALIDATION-ZT.md)。
+
 ## 下载
 
-在 [v0.4.20 发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.20) 下载并同时更新两端：
+在 [v0.4.20_ZT 分支发布页](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.20_ZT) 下载并同时更新两端：
 
-- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.20/Fukaros-0.4.20-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
-- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.20/Furina-0.4.20-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
-- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.20.md)。当前为稳定版本；详细测试范围见 [发布验证](docs/VALIDATION.md)。
+- [Fukaros：Windows x64 安装包](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.20_ZT/Fukaros-0.4.20_ZT-windows-x64-setup.exe)，适用于 Windows 10 / 11，包含 Qt、FFmpeg、独立 ADB 和虚拟显示驱动文件，无需预装 Qt 或模拟器。
+- [Furina：Android ARM64 APK](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/download/v0.4.20_ZT/Furina-0.4.20_ZT-android-arm64.apk)，适用于 Android 9 及以上，沿用原有签名，可覆盖旧版。
+- 发布页同时提供 `SHA256SUMS.txt` 和 [更新说明](docs/UPDATE-0.4.20.md)。这是独立分支预发行包；原稳定版仍可从 v0.4.20 发布页下载。详细测试范围见 [发布验证](docs/VALIDATION.md)。
 
 ## 功能
 

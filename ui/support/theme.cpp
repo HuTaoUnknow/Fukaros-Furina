@@ -9,8 +9,8 @@ QString furinaStyle() {
  QPushButton:hover { background:#33465d; }
  QPushButton:pressed { background:#406184; }
  QPushButton:disabled { color:#768393; border-color:#283542; }
- QPushButton#start,QPushButton#settings,QPushButton#maximize { min-height:36px; padding:6px 0px; }
- QPushButton#start,QPushButton#settings,QPushButton#maximize { min-width:38px; min-height:38px; max-width:38px; max-height:38px; padding:0px; border-radius:20px; font-size:12px; }
+ QPushButton#start,QPushButton#collapse,QPushButton#settings,QPushButton#maximize { min-height:36px; padding:6px 0px; }
+ QPushButton#start,QPushButton#collapse,QPushButton#settings,QPushButton#maximize { min-width:38px; min-height:38px; max-width:38px; max-height:38px; padding:0px; border-radius:20px; font-size:12px; }
  QPushButton#exitFullScreen { background:#253344; }
  QWidget#windowControls { background:#17212c; }
  QWidget#windowControls QPushButton { min-width:32px; max-width:32px; min-height:26px; max-height:26px; padding:0; border:0; border-radius:0; }

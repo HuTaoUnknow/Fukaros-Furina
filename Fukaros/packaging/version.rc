@@ -14,12 +14,12 @@ BEGIN
   BLOCK "040904B0"
   BEGIN
    VALUE "CompanyName", "HuTaoUnknow\0"
-   VALUE "FileDescription", "Fukaros desktop screen sharing\0"
-   VALUE "FileVersion", "0.4.20\0"
+   VALUE "FileDescription", "Fukaros_ZT desktop screen sharing\0"
+   VALUE "FileVersion", "0.4.20_ZT\0"
    VALUE "InternalName", "Fukaros\0"
    VALUE "OriginalFilename", "Fukaros.exe\0"
-   VALUE "ProductName", "Fukaros\0"
-   VALUE "ProductVersion", "0.4.20\0"
+   VALUE "ProductName", "Fukaros_ZT\0"
+   VALUE "ProductVersion", "0.4.20_ZT\0"
   END
  END
  BLOCK "VarFileInfo"

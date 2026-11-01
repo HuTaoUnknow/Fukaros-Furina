@@ -105,7 +105,7 @@ void Presentation::setActive(bool on) {
         if (m_exit)
             m_exit->hide();
         m_sidebar->show();
-        m_controls->show();
+        m_controls->setVisible(!m_controlsCollapsed);
 #ifdef Q_OS_WIN
         // Qt restores the native style saved on entry when leaving fullscreen.
         // Clear that state before restoring our flags, otherwise its saved
@@ -125,4 +125,9 @@ void Presentation::setActive(bool on) {
 #endif
     }
     emit changed(on);
+}
+
+void Presentation::setControlsCollapsed(bool collapsed) {
+    m_controlsCollapsed = collapsed;
+    m_controls->setVisible(!m_active && !collapsed);
 }

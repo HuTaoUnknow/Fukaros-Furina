@@ -83,8 +83,9 @@ void MainWindow::setupInterface() {
     cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
     setStyleSheet(furinaStyle());
     furinaConfigureToolIcons(ui->settings, ui->maximize);
+    furinaConfigurePanelToggle(ui->collapse);
     setWindowIcon(QIcon(":/icons/app.png"));
-    setWindowTitle("Fukaros · 电脑端");
+    setWindowTitle("Fukaros_ZT · 电脑端");
     resize(1180, 760);
     m_view = new ScreenView(this);
     ui->viewLayout->addWidget(m_view);
@@ -109,6 +110,12 @@ void MainWindow::connectActions() {
             [this] { furinaSaveCastDirection(m_direction->sharing()); });
     connect(m_castControl, &CastControl::startRequested, this, &MainWindow::start);
     connect(m_castControl, &CastControl::stopRequested, this, &MainWindow::stop);
+    connect(ui->collapse, &QPushButton::toggled, this, [this](bool collapsed) {
+        m_presentation->setControlsCollapsed(collapsed);
+    });
+    connect(m_consent, &SessionConsent::incoming, this, [this] {
+        ui->collapse->setChecked(false);
+    });
     connect(ui->settings, &QPushButton::clicked, this, &MainWindow::openSettings);
     connect(ui->maximize, &QPushButton::clicked, this, &MainWindow::maximize);
     connect(m_presentation, &Presentation::changed, this,

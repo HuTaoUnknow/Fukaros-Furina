@@ -9,11 +9,11 @@
 DesktopTray::DesktopTray(QWidget* window, const QIcon& icon)
     : QObject(window), m_window(window), m_tray(new QSystemTrayIcon(icon, this)), m_menu(new QMenu(window)) {
     m_tray->setObjectName("desktopTrayIcon");
-    m_tray->setToolTip("Fukaros");
-    auto* show = m_menu->addAction("打开 Fukaros");
+    m_tray->setToolTip("Fukaros_ZT");
+    auto* show = m_menu->addAction("打开 Fukaros_ZT");
     show->setObjectName("trayShow");
     m_menu->addSeparator();
-    auto* quit = m_menu->addAction("退出 Fukaros");
+    auto* quit = m_menu->addAction("退出 Fukaros_ZT");
     quit->setObjectName("trayQuit");
     m_tray->setContextMenu(m_menu);
     connect(show, &QAction::triggered, this, &DesktopTray::restoreWindow);

@@ -3,7 +3,7 @@
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
   <property name="windowTitle">
-   <string>Fukaros</string>
+   <string>Fukaros_ZT</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="mainLayout" stretch="0,1">
@@ -83,6 +83,16 @@
           </size>
          </property>
         </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="collapse">
+         <property name="minimumSize"><size><width>40</width><height>40</height></size></property>
+         <property name="maximumSize"><size><width>40</width><height>40</height></size></property>
+         <property name="text"><string /></property>
+         <property name="toolTip"><string>收起投屏方向和调试信息</string></property>
+         <property name="accessibleName"><string>收起投屏方向和调试信息</string></property>
+         <property name="checkable"><bool>true</bool></property>
+        </widget>
        </item>
        <item>
         <widget class="QPushButton" name="settings">

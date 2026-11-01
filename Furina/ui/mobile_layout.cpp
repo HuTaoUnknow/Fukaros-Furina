@@ -28,6 +28,7 @@ MobileLayout::MobileLayout(QMainWindow* window) : QObject(window), m_window(wind
     m_modes = window->findChild<QCheckBox*>("showCasting");
     m_logs = window->findChild<QCheckBox*>("showDebug");
     m_start = window->findChild<QPushButton*>("start");
+    m_collapse = window->findChild<QPushButton*>("collapse");
     m_settings = window->findChild<QPushButton*>("settings");
     m_maximize = window->findChild<QPushButton*>("maximize");
     auto* pages = new QButtonGroup(this);
@@ -50,20 +51,24 @@ void MobileLayout::refresh(bool fullscreen) {
     QScopedValueRollback<bool> arranging(m_arranging, true);
     m_fullscreen = fullscreen;
     const bool portrait = m_window->width() < m_window->height();
+    const bool collapsed = m_collapse->isChecked();
+    const bool limitedPreview = portrait && !fullscreen && !collapsed;
     if (!m_initialized || portrait != m_portrait) {
         const bool consentVisible = !m_consent->isHidden();
         if (portrait) {
             m_toolLayout->insertWidget(0, m_start);
+            m_toolLayout->addWidget(m_collapse);
             m_toolLayout->addWidget(m_settings);
             m_toolLayout->addWidget(m_maximize);
             m_consentLayout->addWidget(m_consent);
         } else {
             m_sideLayout->insertWidget(0, m_start);
+            m_sideLayout->addWidget(m_collapse);
             m_sideLayout->addWidget(m_settings);
             m_sideLayout->addWidget(m_maximize);
             m_debugLayout->insertWidget(0, m_consent);
         }
-        for (auto* button : {m_start, m_settings, m_maximize})
+        for (auto* button : {m_start, m_collapse, m_settings, m_maximize})
             button->show();
         m_consent->setVisible(consentVisible);
         m_portrait = portrait;
@@ -71,9 +76,9 @@ void MobileLayout::refresh(bool fullscreen) {
     }
     m_sidebar->setVisible(!portrait && !fullscreen);
     m_toolbar->setVisible(portrait && !fullscreen);
-    m_tabs->setVisible(portrait && !fullscreen);
+    m_tabs->setVisible(portrait && !fullscreen && !collapsed);
     m_consentHost->setVisible(portrait && !fullscreen);
-    m_bottom->setVisible(!fullscreen);
+    m_bottom->setVisible(!fullscreen && !collapsed);
     m_debugTitle->setVisible(!portrait);
     m_direction->setVisible(!portrait || m_modes->isChecked());
     m_debug->setVisible(!portrait || m_logs->isChecked());
@@ -88,12 +93,12 @@ void MobileLayout::refresh(bool fullscreen) {
         portraitExtension
             ? qBound(140, qRound(m_window->width() * 1.6), qMax(140, m_window->height() - 280))
             : qBound(140, qRound(m_window->width() * 9.0 / 16.0), qMax(140, m_window->height() / 2));
-    m_preview->setMinimumHeight(portrait && !fullscreen ? (portraitExtension ? 140 : previewHeight) : 0);
-    m_preview->setMaximumHeight(portrait && !fullscreen ? previewHeight : QWIDGETSIZE_MAX);
+    m_preview->setMinimumHeight(limitedPreview ? (portraitExtension ? 140 : previewHeight) : 0);
+    m_preview->setMaximumHeight(limitedPreview ? previewHeight : QWIDGETSIZE_MAX);
     for (int i = 0; i < m_contentLayout->count(); ++i)
         m_contentLayout->setStretch(
             i, m_contentLayout->itemAt(i)->widget() ==
-                       (portrait && !fullscreen && !portraitExtension ? m_bottom : m_preview)
+                       (limitedPreview && !portraitExtension ? m_bottom : m_preview)
                    ? 1
                    : 0);
     m_bottomLayout->setStretch(0, portrait ? 1 : 4);
