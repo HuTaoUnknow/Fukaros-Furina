@@ -3,12 +3,13 @@ project(Fukaros VERSION 0.4.20 LANGUAGES C CXX)
 include(../cmake/ProjectDefaults.cmake)
 
 set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/forms")
-add_library(fukaros_display_native STATIC core/display/virtual_display.c core/display/display_scale.c)
+add_library(fukaros_display_native STATIC
+    core/display/virtual_display.c core/display/display_scale.c core/display/helper_launch.c)
 target_link_libraries(fukaros_display_native PUBLIC furina_protocol)
 set_target_properties(fukaros_display_native PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(fukaros_display_native PUBLIC core/display)
 if(WIN32)
-    target_link_libraries(fukaros_display_native PUBLIC user32 setupapi)
+    target_link_libraries(fukaros_display_native PUBLIC user32 setupapi advapi32)
 endif()
 
 add_library(fukaros_platform STATIC
@@ -56,6 +57,20 @@ if(WIN32)
     if(MINGW)
         target_link_options(virtual_display_helper PRIVATE -municode -static)
     endif()
+    set(FUKAROS_HELPER_HASH_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    set(FUKAROS_HELPER_HASH_H "${FUKAROS_HELPER_HASH_DIR}/helper_hash.h")
+    file(MAKE_DIRECTORY "${FUKAROS_HELPER_HASH_DIR}")
+    add_custom_command(TARGET virtual_display_helper POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+            -DHELPER=$<TARGET_FILE:virtual_display_helper>
+            -DOUT=${FUKAROS_HELPER_HASH_H}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_helper_hash.cmake
+        BYPRODUCTS ${FUKAROS_HELPER_HASH_H}
+        VERBATIM)
+    target_sources(fukaros_platform PRIVATE core/display/helper_stage_win.cpp)
+    target_include_directories(fukaros_platform PRIVATE "${FUKAROS_HELPER_HASH_DIR}")
+    set_source_files_properties(core/display/helper_stage_win.cpp PROPERTIES OBJECT_DEPENDS "${FUKAROS_HELPER_HASH_H}")
+    add_dependencies(fukaros_platform virtual_display_helper)
     add_dependencies(Fukaros virtual_display_helper)
     add_custom_command(TARGET Fukaros POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/core/display/virtual-display/driver" "$<TARGET_FILE_DIR:Fukaros>/virtual-display")
