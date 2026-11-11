@@ -8,7 +8,8 @@
 #   libxkbcommon, libxcb, libdbus, libfontconfig, libfreetype.
 #
 # Not installed, and not exercised by this workflow:
-#   Android SDK, NDK, JDK, emulator, or APK packaging (Furina/build-android.ps1)
+#   Android SDK, NDK, or APK packaging. android-compile.yml cross-compiles the
+#   arm64 APK and still does not boot an emulator or open the camera / Keystore.
 #   NVIDIA drivers or NVENC (headers are vendored; the encoder is Windows-only)
 #   Windows IDD virtual display driver (MttVDD) and Inno Setup
 #   MinGW, ADB platform-tools, or a physical tablet

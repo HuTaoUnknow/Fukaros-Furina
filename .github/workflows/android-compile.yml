@@ -1,0 +1,102 @@
+# Cross-compile Furina for Android and package an unsigned APK.
+#
+# This matches the native half of Furina/build-android.ps1:
+#   Qt 6.11.1 android_arm64_v8a, host gcc_64 tools, NDK r27c (27.2.12479018),
+#   SDK platform android-36, build-tools 36.0.0, ANDROID_PLATFORM=android-28,
+#   Release. The job links libFurina_arm64-v8a.so and runs androiddeployqt.
+#
+# Not covered, because there is no device or emulator:
+#   camera permission prompts, camera preview, QR decoding from a real sensor,
+#   and Android Keystore / SecretBox encryption.
+name: Android cross-compile
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host packages
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            cmake ninja-build python3-pip unzip curl ca-certificates openjdk-21-jdk
+
+      - name: Cache Android NDK r27c
+        id: ndk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/android-ndk-r27c
+          key: android-ndk-r27c-linux
+
+      - name: Install Android NDK r27c
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o "${{ runner.temp }}/ndk.zip" \
+            https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+          unzip -q "${{ runner.temp }}/ndk.zip" -d "${{ runner.temp }}"
+
+      - name: Cache Qt 6.11.1 Android arm64 and host tools
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/qt
+          key: qt-6.11.1-linux-android_arm64_v8a-host-gcc_64-aqt330
+
+      - name: Install Qt 6.11.1
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          python3 -m pip install --user 'aqtinstall==3.3.0'
+          export PATH="$HOME/.local/bin:$PATH"
+          aqt install-qt linux android 6.11.1 android_arm64_v8a --autodesktop \
+            -O "${{ runner.temp }}/qt"
+
+      - name: Cache Android SDK
+        id: sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/android-sdk
+          key: android-sdk-platform-36-build-tools-36.0.0-platform-tools
+
+      - name: Install Android SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          sdk="${{ runner.temp }}/android-sdk"
+          curl -fsSL -o "${{ runner.temp }}/cmdtools.zip" \
+            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          mkdir -p "$sdk/cmdline-tools"
+          unzip -q "${{ runner.temp }}/cmdtools.zip" -d "$sdk/cmdline-tools"
+          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses || true
+          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" \
+            "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Configure
+        env:
+          QT: ${{ runner.temp }}/qt/6.11.1
+          NDK: ${{ runner.temp }}/android-ndk-r27c
+          SDK: ${{ runner.temp }}/android-sdk
+        run: |
+          cmake -S Furina -B build-android -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$QT/android_arm64_v8a/lib/cmake/Qt6/qt.toolchain.cmake" \
+            -DQT_HOST_PATH="$QT/gcc_64" \
+            -DANDROID_SDK_ROOT="$SDK" \
+            -DANDROID_NDK_ROOT="$NDK" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28
+
+      - name: Build unsigned APK
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
+          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+          ANDROID_NDK_ROOT: ${{ runner.temp }}/android-ndk-r27c
+          QT_HOST_PATH: ${{ runner.temp }}/qt/6.11.1/gcc_64
+        run: |
+          cmake --build build-android --target apk --parallel
+          test -s build-android/android-build/Furina.apk
