@@ -1,18 +1,26 @@
 #include "virtual_display_controller.h"
 #include "display_scale.h"
+#include "helper_launch.h"
 #include "screen_scale.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QFileInfo>
 #include <QDir>
+#include <string>
 #ifdef Q_OS_WIN
-#include <shellapi.h>
+#include <windows.h>
 #endif
 VirtualDisplayController::VirtualDisplayController(QObject* parent) : QObject(parent) {
     m_poll.setInterval(100);
     connect(&m_poll, &QTimer::timeout, this, &VirtualDisplayController::poll);
     m_releaseRetry.setInterval(250);
     connect(&m_releaseRetry, &QTimer::timeout, this, &VirtualDisplayController::finishRelease);
+    /* A crash cannot run this destructor. Drop a half-applied virtual display on the next start. */
+    fr_virtual_detach_idle();
+#ifdef Q_OS_WIN
+    fr_helper_cleanup_user_residue();
+    fr_helper_reap_launch_lock();
+#endif
 }
 
 VirtualDisplayController::~VirtualDisplayController() {
@@ -94,23 +102,31 @@ void VirtualDisplayController::ensure(bool portrait) {
         return;
     }
     emit status(
-        "首次启用扩展：正在安装虚拟显示驱动，请允许系统安装提示。",
-        "First extension: installing the virtual display driver. Allow the Windows installation prompt.");
-    const std::wstring exe = QDir::toNativeSeparators(helper).toStdWString();
-    const std::wstring args = ("install \"" + QDir::toNativeSeparators(package) + "\"").toStdWString();
-    SHELLEXECUTEINFOW info{};
-    info.cbSize = sizeof(info);
-    info.fMask = SEE_MASK_NOCLOSEPROCESS;
-    info.lpVerb = L"runas";
-    info.lpFile = exe.c_str();
-    info.lpParameters = args.c_str();
-    info.nShow = SW_HIDE;
-    if (!ShellExecuteExW(&info)) {
-        fail("虚拟屏安装未完成，错误：" + QString::number(GetLastError()),
-             "Virtual display installation did not start. Error: " + QString::number(GetLastError()));
+        "首次启用扩展：正在从受保护位置安装虚拟显示驱动，请允许系统提权提示。",
+        "First extension: installing the virtual display driver from a protected location. Allow the elevation prompt.");
+    HANDLE process = nullptr, lock = nullptr;
+    const std::wstring helperPath = QDir::toNativeSeparators(helper).toStdWString();
+    const std::wstring packagePath = QDir::toNativeSeparators(package).toStdWString();
+    const int code =
+        fr_helper_start_install(helperPath.c_str(), packagePath.c_str(), (void**)&process, (void**)&lock);
+    if (code) {
+        if (code == 11)
+            fail("虚拟显示安装程序未通过完整性校验，已取消提权。",
+                 "The virtual display helper failed its integrity check. Elevation was cancelled.");
+        else if (code == 15)
+            fail("虚拟显示安装程序位于可写目录，且无法放入受保护目录，已取消提权。",
+                 "The virtual display helper is in a writable directory and could not be staged into a protected "
+                 "directory. Elevation was cancelled.");
+        else if (code == 16)
+            fail("虚拟显示安装仍在进行，请稍候再试。",
+                 "Virtual display installation is already running. Please retry shortly.");
+        else
+            fail("虚拟屏安装未完成，错误：" + QString::number(code),
+                 "Virtual display installation did not start. Error: " + QString::number(code));
         return;
     }
-    m_installer = info.hProcess;
+    fr_helper_track_launch_lock(process, lock);
+    m_installer = process;
     m_installing = true;
     m_poll.start();
 #else
@@ -146,6 +162,7 @@ void VirtualDisplayController::poll() {
             return;
         CloseHandle(static_cast<HANDLE>(m_installer));
         m_installer = nullptr;
+        fr_helper_reap_launch_lock();
         m_installing = false;
         if (code || !available()) {
             fail(code == 3 ? "驱动已安装，请重启电脑后启用扩展。"
@@ -201,6 +218,7 @@ void VirtualDisplayController::release() {
         CloseHandle(static_cast<HANDLE>(m_installer));
         m_installer = nullptr;
     }
+    fr_helper_reap_launch_lock();
 #endif
     m_installing = false;
     m_releaseRetry.stop();

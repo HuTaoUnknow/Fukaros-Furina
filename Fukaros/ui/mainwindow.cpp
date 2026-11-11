@@ -102,6 +102,7 @@ void MainWindow::setupInterface() {
             [this](const QString& cn, const QString& en) { log(cn, en); });
     m_castUi = new CastUiState(this);
     m_castControl = new CastControl(this, m_castUi, &m_peer);
+    bindPairingUi();
 }
 
 void MainWindow::connectActions() {

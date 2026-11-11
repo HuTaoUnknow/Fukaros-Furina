@@ -66,6 +66,10 @@ class MainWindow : public QMainWindow {
     void loadSettings();
     void saveSettings();
     void openSettings();
+    void bindPairingUi();
+    void refreshPairingHint();
+    void scanPairingQr();
+    void pairFromQrPayload(const QString& payload);
     void refreshAddresses();
     void start();
     void stop();

@@ -46,17 +46,27 @@ class UsbNetworkTest : public QObject {
         finder.start({}, 3000, port);
         QTRY_COMPARE_WITH_TIMEOUT(found.count(), 1, 4000);
         QVERIFY(failed.isEmpty());
-        QCOMPARE(found.first()[0].toString(), QString("127.0.0.3"));
+        // The product reports the UDP reply source. Linux loopback rewrites a reply
+        // from a socket bound to 127.0.0.3 so the source is 127.0.0.1. Windows keeps
+        // the bound address.
+#ifdef Q_OS_LINUX
+        const QString tablet = QStringLiteral("127.0.0.1");
+#else
+        const QString tablet = QStringLiteral("127.0.0.3");
+#endif
+        QCOMPARE(found.first()[0].toString(), tablet);
         QCOMPARE(found.first()[1].toString(), QString("127.0.0.2"));
         Peer server, client;
-        QVERIFY(server.listen(27195, "usb-network-test", "127.0.0.3"));
+        QVERIFY(server.listen(27195, "usb-network-test", tablet));
         QSignalSpy ready(&client, &Peer::connected), status(&server, &Peer::status);
         client.connectTo(found.first()[0].toString(), 27195, "usb-network-test", found.first()[1].toString());
         QTRY_VERIFY(client.ready() && server.ready());
         QCOMPARE(ready.count(), 1);
-        auto* transport = client.findChild<QTcpSocket*>();
+        auto* transport = qobject_cast<QTcpSocket*>(client.mainTransport());
         QVERIFY(transport);
-        QCOMPARE(transport->localAddress(), QHostAddress("127.0.0.2"));
+        QHostAddress local;
+        QMetaObject::invokeMethod(transport, [&] { local = transport->localAddress(); }, Qt::BlockingQueuedConnection);
+        QCOMPARE(local, QHostAddress("127.0.0.2"));
         QSignalSpy received(&server, &Peer::session);
         client.sendSession(FR_REQUEST_KEY);
         QTRY_COMPARE(received.count(), 1);

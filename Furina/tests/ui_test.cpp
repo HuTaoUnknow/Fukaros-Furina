@@ -323,7 +323,7 @@ class UiTest : public QObject {
 
     void usbServiceIncludesDiscovery() {
         MainWindow w;
-        w.findChild<QLineEdit*>("token")->setText("usb-mobile-test-code");
+        w.findChild<QLineEdit*>("token")->setText("N7P3K9M2R8Q4");
         w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
         // A Wi-Fi-only bind address must not prevent the USB page from listening.
         w.findChild<QLineEdit*>("host")->setText("invalid-wifi-address");
@@ -443,7 +443,7 @@ class UiTest : public QObject {
         QCOMPARE(button->iconSize(), w.findChild<QPushButton*>("settings")->iconSize());
         QCOMPARE(control->state(), CastControl::Start);
         w.findChild<QLineEdit*>("host")->setText("0.0.0.0");
-        w.findChild<QLineEdit*>("token")->setText("control-test-code");
+        w.findChild<QLineEdit*>("token")->setText("K4N8P2R7M3Q9");
         QVERIFY(!w.findChild<QLabel*>("castHint") && !w.findChild<QLabel*>("performanceHint"));
         QVERIFY(w.findChild<QFrame*>("modeSeparator")->isVisible());
         QVERIFY(w.findChild<QFrame*>("resolutionSeparator")->isVisible());
@@ -498,7 +498,7 @@ class UiTest : public QObject {
         w.findChild<QPushButton*>("settings")->click();
         auto* dialog = w.findChild<QDialog*>("SettingsDialog");
         QTRY_VERIFY(dialog->isVisible());
-        w.findChild<QLineEdit*>("token")->setText("black-ui-code");
+        w.findChild<QLineEdit*>("token")->setText("M8Q3K7N2R9P4");
         w.findChild<QLineEdit*>("host")->setText("0.0.0.0");
         w.findChild<QCheckBox*>("allowControl")->setChecked(false);
         dialog->accept();
@@ -508,7 +508,7 @@ class UiTest : public QObject {
         QSignalSpy connected(&client, &Peer::connected), status(&client, &Peer::status),
             sessions(&client, &Peer::session), approvals(&client, &Peer::approval),
             profiles(&client, &Peer::profile);
-        client.connectTo("127.0.0.2", 27183, "black-ui-code");
+        client.connectTo("127.0.0.2", 27183, "M8Q3K7N2R9P4");
         QTRY_COMPARE(connected.count(), 1);
         QCOMPARE(control->state(), CastControl::Waiting);
         client.sendApproval(1001, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
@@ -581,7 +581,7 @@ class UiTest : public QObject {
             }
             start->click();
             if (!client.ready())
-                client.connectTo("127.0.0.2", 27183, "black-ui-code");
+                client.connectTo("127.0.0.2", 27183, "M8Q3K7N2R9P4");
             QTRY_VERIFY(client.ready());
             QTRY_COMPARE(requestCount(approvals), count + 1);
             const auto row = approvals.last();
@@ -642,7 +642,7 @@ class UiTest : public QObject {
         QTRY_VERIFY(!w.findChild<Peer*>()->ready());
         QVERIFY(state->occupied() && (start->isEnabled() && control->state() == CastControl::Stop) &&
                 !share->isEnabled());
-        client.connectTo("127.0.0.2", 27183, "black-ui-code");
+        client.connectTo("127.0.0.2", 27183, "M8Q3K7N2R9P4");
         QTRY_VERIFY(client.ready());
         const auto replies = approvals.count();
         client.sendApproval(2001, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);

@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <cstdio>
 #include "mainwindow.h"
+#include "secret_store.h"
 
 // Deliberate USB/device test using the actual window, consent, DPI controller,
 // capture and encoder. Run with adb forward tcp:28183 tcp:27183 first.
@@ -39,7 +40,8 @@ int main(int argc, char** argv) {
     app.setOrganizationName("FurinaHardware");
     app.setApplicationName("ScaleStreamAB");
     QSettings original("Furina", "Fukaros"), settings;
-    const auto token = original.value("token").toString();
+    SecretStore secrets(original);
+    const auto token = QString::fromUtf8(pairingMigratePlaintext(secrets, original, "token", "manual-code"));
     if (token.isEmpty())
         return 77;
     settings.clear();

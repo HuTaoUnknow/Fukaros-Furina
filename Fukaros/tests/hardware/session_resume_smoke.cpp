@@ -3,6 +3,7 @@
 #include <QSettings>
 #include <cstdio>
 #include "peer.h"
+#include "secret_store.h"
 #include "desktop_video.h"
 #include "virtual_display.h"
 
@@ -11,7 +12,10 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
     QSettings settings("Furina", "Fukaros");
-    const QString host = settings.value("host").toString(), token = settings.value("token").toString();
+    SecretStore secrets(settings);
+    const QString host = settings.value("host").toString();
+    const QString token =
+        QString::fromUtf8(pairingMigratePlaintext(secrets, settings, "token", "manual-code"));
     if (host.isEmpty() || token.isEmpty())
         return 77;
     Peer peer;

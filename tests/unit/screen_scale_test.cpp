@@ -1,7 +1,8 @@
 #include <QtTest>
+#include <QElapsedTimer>
 #include <QSettings>
-#include <QMessageAuthenticationCode>
 #include <QTcpServer>
+#include "furina_channel.h"
 #include "screen_scale.h"
 #include "screen_scale_settings.h"
 
@@ -83,52 +84,78 @@ class ScaleTest : public QObject {
         QTcpServer legacy;
         QVERIFY(legacy.listen(QHostAddress::LocalHost, 0));
         Peer client;
+        QSignalSpy notes(&client, &Peer::status);
         client.connectTo("127.0.0.1", legacy.serverPort(), "legacy-code");
         QTRY_VERIFY(legacy.hasPendingConnections());
         auto* socket = legacy.nextPendingConnection();
-        auto send = [socket](int type, const QByteArray& payload) {
-            uint8_t header[FR_HEADER_SIZE];
-            QVERIFY(fr_encode_header(header, type, payload.size()));
-            socket->write(reinterpret_cast<char*>(header), sizeof(header));
-            socket->write(payload);
-        };
-        send(FR_CHALLENGE, QByteArray(32, 'x'));
-        QTRY_VERIFY(socket->bytesAvailable() >= 44);
-        const auto auth = socket->readAll();
-        QCOMPARE(auth.mid(12, 32),
-                 QMessageAuthenticationCode::hash(QByteArray(32, 'x'), QByteArray("legacy-code"),
-                                                  QCryptographicHash::Sha256));
-        send(FR_READY, {});
-        QTRY_VERIFY(client.ready());
-        client.sendScreenScale(200, 123);
-        client.sendStatus("normal-status");
-        QTRY_VERIFY(socket->bytesAvailable() > 0);
-        QTest::qWait(40);
-        QByteArray wire = socket->readAll();
-        bool normal = false;
-        while (wire.size() >= FR_HEADER_SIZE) {
-            fr_header h{};
-            QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(wire.constData()), &h));
-            QVERIFY(wire.size() >= int(FR_HEADER_SIZE + h.length));
-            QVERIFY(h.type <= FR_CURSOR_PREFERENCE);
-            if (wire.mid(FR_HEADER_SIZE, h.length) == "normal-status")
-                normal = true;
-            wire.remove(0, FR_HEADER_SIZE + h.length);
+        QTRY_VERIFY(socket->bytesAvailable() >= 4);
+        QCOMPARE(socket->read(4), QByteArray("FUR2"));
+        socket->write("FUR1", 4);
+        socket->flush();
+        QTRY_COMPARE(socket->state(), QAbstractSocket::UnconnectedState);
+        QVERIFY(!client.ready());
+        bool rejected = false;
+        for (const auto& row : notes) {
+            const auto text = row.at(0).toString();
+            QVERIFY(!text.contains("legacy-code"));
+            if (text.contains("0.4.x") || text.contains("明文"))
+                rejected = true;
         }
-        QVERIFY(normal);
-        QVERIFY(client.ready());
-        // A v1 peer accepts message 17, but only its original 12-byte form.
-        QSignalSpy capability(&client, &Peer::screenScaleAvailable);
-        send(FR_STATUS, QByteArray("Furina capability: screen-scale-v1"));
+        QVERIFY(rejected);
+
+        // A FUR2 peer that only advertises scale v1 still receives the 12-byte form.
+        QTcpServer modern;
+        QVERIFY(modern.listen(QHostAddress::LocalHost, 0));
+        Peer scaled;
+        QSignalSpy capability(&scaled, &Peer::screenScaleAvailable);
+        scaled.connectTo("127.0.0.1", modern.serverPort(), "scale-v1-code");
+        QTRY_VERIFY(modern.hasPendingConnections());
+        auto* link = modern.nextPendingConnection();
+        FurinaChannel server;
+        server.reset(FurinaChannel::Role::Server, "scale-v1-code");
+        link->write(server.start());
+        QElapsedTimer timer;
+        timer.start();
+        while (!server.transportReady() && timer.elapsed() < 3000) {
+            if (!link->waitForReadyRead(30))
+                continue;
+            QByteArray out;
+            QVERIFY(server.push(link->readAll(), &out));
+            if (!out.isEmpty())
+                link->write(out);
+        }
+        QVERIFY(server.transportReady());
+        auto seal = [&](quint8 type, const QByteArray& payload) {
+            QByteArray wire;
+            const bool ok = server.seal(type, payload, &wire);
+            if (ok)
+                link->write(wire);
+            return ok;
+        };
+        QVERIFY(seal(FR_READY, {}));
+        QVERIFY(seal(FR_STATUS, QByteArray("Furina capability: screen-scale-v1")));
+        QTRY_VERIFY(scaled.ready());
         QTRY_COMPARE(capability.size(), 1);
-        client.sendScreenScale(200, 123, false);
-        QTRY_VERIFY(socket->bytesAvailable() >= FR_HEADER_SIZE + 12);
-        const auto legacyScale = socket->read(FR_HEADER_SIZE + 12);
-        fr_header scaleHeader{};
-        QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(legacyScale.constData()), &scaleHeader));
-        QCOMPARE(scaleHeader.type, quint8(FR_SCREEN_SCALE));
-        QCOMPARE(scaleHeader.length, quint32(12));
-        QCOMPARE(fr_get_u32(reinterpret_cast<const uint8_t*>(legacyScale.constData() + FR_HEADER_SIZE)), quint32(100));
+        scaled.sendScreenScale(200, 123, false);
+        timer.restart();
+        bool sawLegacyScale = false;
+        while (!sawLegacyScale && timer.elapsed() < 2000) {
+            if (!link->waitForReadyRead(30))
+                continue;
+            QByteArray out;
+            QVERIFY(server.push(link->readAll(), &out));
+            quint8 type = 0;
+            QByteArray payload;
+            while (server.pop(&type, &payload)) {
+                if (type != FR_SCREEN_SCALE)
+                    continue;
+                QCOMPARE(payload.size(), 12);
+                QCOMPARE(fr_get_u32(reinterpret_cast<const uint8_t*>(payload.constData())), 100u);
+                sawLegacyScale = true;
+            }
+        }
+        QVERIFY(sawLegacyScale);
+        QVERIFY(scaled.ready());
     }
 
     void toggleSynchronizesAndRestoresSavedScale() {

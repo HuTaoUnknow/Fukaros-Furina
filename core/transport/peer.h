@@ -4,23 +4,37 @@
 #include <QTcpServer>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QHostAddress>
 #include <QImage>
+#include <QMutex>
+#include <QThread>
+#include <atomic>
 #include "furina_protocol.h"
 #include "cursor_transport.h"
 
+class PeerIo;
+
 class Peer : public QObject {
     Q_OBJECT
+    friend class PeerIo;
+
   public:
     explicit Peer(QObject* parent = nullptr);
     ~Peer() override;
+    // token is a reusable human pairing code, or a one-time QR secret "ot1." plus
+    // 22 unpadded base64url characters. setLongTermKey() overrides token for SPAKE2.
     bool listen(quint16 port, const QString& token, const QString& bindAddress = QString());
     void connectTo(const QString& host, quint16 port, const QString& token,
                    const QString& localAddress = QString());
     // Finish queued session cancellation before closing an intentional stop.
     void close(bool graceful = false);
+    // 32-byte key from longTermKeyEstablished. Empty clears it. Later connections
+    // authenticate with this key instead of token.
+    void setLongTermKey(const QByteArray& key);
+    QByteArray establishedLongTermKey() const;
 
     bool ready() const {
-        return m_ready;
+        return m_ready.load();
     }
 
     bool canSendFrame() const;
@@ -36,17 +50,24 @@ class Peer : public QObject {
     void sendScreenScale(int percent, quint64 revision, bool enabled = true);
     void sendPointerSpeed(int percent, quint64 revision);
     void sendCursorPreference(bool enabled, quint64 revision);
-
-    void sendCursor(const QByteArray& data) {
-        m_cursor.send(data);
-    }
+    void sendCursor(const QByteArray& data);
 
     bool cursorReady() const {
-        return m_cursor.isReady();
+        return m_cursorReady.load();
     }
 
     void sendFeedback(double fps, double workMs, unsigned queueMs, double displayedFps);
     unsigned videoQueueMs() const;
+    QHostAddress boundAddress() const;
+    quint16 serverPort() const;
+    QObject* mainTransport() const;
+    int videoInFlight() const {
+        return m_videoInFlight.load();
+    }
+    bool hasOpenSockets() const {
+        return m_openSockets.load() != 0;
+    }
+
   signals:
     void connected();
     void disconnected();
@@ -66,23 +87,22 @@ class Peer : public QObject {
     void cursorConnection(bool ready);
     void cursor(const QByteArray& data);
     void feedback(double fps, double workMs, unsigned queueMs, double displayedFps);
+    void longTermKeyEstablished(const QByteArray& key);
 
   private:
-    CursorTransport m_cursor;
-    QTcpServer m_server;
-    QTcpSocket* m_socket = nullptr;
-    QTimer m_tick;
-    QElapsedTimer m_lastRx, m_session, m_backlog;
-    QByteArray m_rx, m_challenge;
-    QString m_token;
-    bool m_screenScaleSupported = false;
-    bool m_screenScaleToggleSupported = false;
-    bool m_serverSide = false, m_ready = false, m_waitVideoKey = false;
-    int m_pendingPings = 0;
-    void attach(QTcpSocket* socket, bool server);
-    void startCursor();
-    void read();
-    void handle(quint8 type, const QByteArray& payload);
-    void send(quint8 type, const QByteArray& payload = {});
-    void fail(const QString& reason);
+    QThread m_thread;
+    PeerIo* m_io = nullptr;
+    mutable QMutex m_infoLock;
+    QByteArray m_longTermKey;
+    QByteArray m_established;
+    QHostAddress m_bound;
+    quint16 m_port = 0;
+    std::atomic<QTcpSocket*> m_mainSocket{nullptr};
+    std::atomic<bool> m_ready{false};
+    std::atomic<bool> m_cursorReady{false};
+    std::atomic<int> m_videoInFlight{0};
+    std::atomic<bool> m_needVideoKey{false};
+    std::atomic<qint64> m_bytesToWrite{0};
+    std::atomic<qint64> m_backlogStartMs{0};
+    std::atomic<int> m_openSockets{0};
 };

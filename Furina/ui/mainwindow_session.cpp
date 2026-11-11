@@ -1,8 +1,14 @@
 #include "mainwindow.h"
 #include "cast_direction_settings.h"
+#include "pairing_code.h"
+#include "pairing_identity.h"
+#include "pairing_payload.h"
+#include "pairing_session.h"
+#include "secret_store.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
+#include <QDateTime>
 #include <QSettings>
 #include <QRandomGenerator>
 #include <QNetworkInterface>
@@ -25,14 +31,18 @@ void MainWindow::start() {
         requestDirection();
         return;
     }
-    if (cfg->token->text().size() < 6) {
-        log("请填写至少 6 位的配对码。", "Enter a pairing code with at least 6 characters.");
+    PairingCredential credential;
+    credential.kind = PairingSecretKind::ManualCode;
+    credential.secret = pairingNormalizeManualCode(cfg->token->text());
+    const auto code = pairingCheckManualCode(credential.secret);
+    if (!code.ok) {
+        log(code.chinese, code.english);
         openSettings();
         return;
     }
     if (!m_listening) {
         const auto bind = cfg->connectionTabs->currentIndex() == 0 ? QString("0.0.0.0") : cfg->host->text();
-        m_listening = m_peer.listen(27183, cfg->token->text(), bind);
+        m_listening = pairingListen(m_peer, 27183, credential, bind);
         if (!m_listening)
             return;
         if (!m_discovery.start(bind))
@@ -248,6 +258,10 @@ void MainWindow::connectTransportEvents() {
         });
     });
     connect(&m_peer, &Peer::disconnected, this, [this] {
+        // ready() clears on the IO thread before this queued slot runs. A portrait
+        // preview can already be fullscreen by then. Only an open session may take
+        // that fullscreen and its image down with the socket.
+        const bool live = m_sessionActive || m_pending || m_castUi->occupied();
         m_android.keepSession(false);
         m_castUi->connectionLost();
         if (m_castUi->occupied())
@@ -260,9 +274,11 @@ void MainWindow::connectTransportEvents() {
         m_pending = false;
         m_sessionActive = false;
         m_remoteMax = false;
-        m_presentation->setActive(false);
-        furinaSetMaximizeIcon(ui->maximize, false);
-        m_view->setImage({});
+        if (live) {
+            m_presentation->setActive(false);
+            m_view->setImage({});
+        }
+        furinaSetMaximizeIcon(ui->maximize, m_presentation->active());
     });
     connect(&m_android, &AndroidBridge::captureStopped, this, [this] {
         if (!m_sharing)
@@ -271,4 +287,41 @@ void MainWindow::connectTransportEvents() {
         m_sessionActive = false;
         m_peer.sendSession(FR_STOP_SHARE);
     });
+}
+
+void MainWindow::pairFromQrPayload(const QString& payload) {
+    if (m_castUi->locked()) {
+        log("投屏方式已锁定，请点击停止后修改设置。",
+            "Casting options are locked. Press Stop to change settings.");
+        return;
+    }
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const auto decoded = pairingDecodePayload(payload, now);
+    if (!decoded.ok) {
+        log(decoded.chinese, decoded.english);
+        return;
+    }
+    auto& store = SecretStore::instance();
+    if (!pairingPinPublicKey(store, decoded.payload.host, decoded.payload.fingerprint)) {
+        log("桌面公钥指纹与已固定的不一致。",
+            "Desktop public key fingerprint does not match the pinned key.");
+        return;
+    }
+    if (!pairingConsumeOneTimeSecret(store, decoded.payload.secret, decoded.payload.expiry, now)) {
+        log("二维码已使用。", "QR code was already used.");
+        return;
+    }
+    PairingCredential credential;
+    credential.secret = decoded.payload.secret;
+    credential.kind = PairingSecretKind::OneTimeQr;
+    credential.pinnedFingerprint = decoded.payload.fingerprint;
+    stop();
+    if (!pairingConnect(m_peer, decoded.payload.host, decoded.payload.port, credential)) {
+        log("二维码无效。", "QR code is invalid.");
+        return;
+    }
+    m_listening = false;
+    m_pending = true;
+    m_castUi->lockPending();
+    log("已固定桌面公钥指纹，正在连接电脑。", "Pinned the desktop public key. Connecting to the PC.");
 }
