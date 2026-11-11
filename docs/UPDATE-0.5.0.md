@@ -2,7 +2,7 @@
 
 日期：2026-11-11。CMake 工程版本为 **0.5.0**（仓库根目录、Fukaros、Furina 的 `project()`）。这次有意改变线路，0.4.x 对端会被拒绝，没有明文或 HMAC 回退。
 
-还没有新的 Windows 安装包和 Android APK。安装脚本和 Android `versionName` 仍写着 0.4.20。已发布的安装包仍是 [v0.4.20](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.20)。
+还没有新的 Windows 安装包和 Android APK。安装脚本、Android `versionName` 和 Windows 版本资源已经是 0.5.0。已发布的安装包仍是 [v0.4.20](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.20)。
 
 ## 加密信道
 
