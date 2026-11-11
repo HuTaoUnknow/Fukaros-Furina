@@ -23,8 +23,23 @@ add_library(furina_transport STATIC
     ${FURINA_ROOT}/core/transport/peer.cpp
     ${FURINA_ROOT}/core/transport/peer.h
     ${FURINA_ROOT}/core/transport/network_discovery.cpp
+    ${FURINA_ROOT}/core/crypto/monocypher.c
+    ${FURINA_ROOT}/core/crypto/ed25519_group.c
+    ${FURINA_ROOT}/core/crypto/spake2.cpp
+    ${FURINA_ROOT}/core/crypto/furina_channel.cpp
+    ${FURINA_ROOT}/core/crypto/handshake_limiter.cpp
 )
-target_include_directories(furina_transport PUBLIC ${FURINA_ROOT}/core/transport)
+set_source_files_properties(
+    ${FURINA_ROOT}/core/crypto/monocypher.c
+    ${FURINA_ROOT}/core/crypto/ed25519_group.c
+    ${FURINA_ROOT}/core/crypto/spake2.cpp
+    ${FURINA_ROOT}/core/crypto/furina_channel.cpp
+    PROPERTIES COMPILE_OPTIONS "-O2" SKIP_PRECOMPILE_HEADERS ON
+)
+target_include_directories(furina_transport PUBLIC
+    ${FURINA_ROOT}/core/transport
+    ${FURINA_ROOT}/core/crypto
+)
 target_link_libraries(furina_transport PUBLIC furina_protocol Qt6::Network Qt6::Gui)
 
 add_library(furina_widgets STATIC

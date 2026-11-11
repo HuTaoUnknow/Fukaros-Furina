@@ -54,9 +54,11 @@ class UsbNetworkTest : public QObject {
         client.connectTo(found.first()[0].toString(), 27195, "usb-network-test", found.first()[1].toString());
         QTRY_VERIFY(client.ready() && server.ready());
         QCOMPARE(ready.count(), 1);
-        auto* transport = client.findChild<QTcpSocket*>();
+        auto* transport = qobject_cast<QTcpSocket*>(client.mainTransport());
         QVERIFY(transport);
-        QCOMPARE(transport->localAddress(), QHostAddress("127.0.0.2"));
+        QHostAddress local;
+        QMetaObject::invokeMethod(transport, [&] { local = transport->localAddress(); }, Qt::BlockingQueuedConnection);
+        QCOMPARE(local, QHostAddress("127.0.0.2"));
         QSignalSpy received(&server, &Peer::session);
         client.sendSession(FR_REQUEST_KEY);
         QTRY_COMPARE(received.count(), 1);

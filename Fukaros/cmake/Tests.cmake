@@ -10,6 +10,8 @@ add_test(NAME cast_source COMMAND cast_source_test)
 
 furina_test(peer_test peer ${FURINA_ROOT}/tests/unit/peer_test.cpp)
 target_link_libraries(peer_test PRIVATE furina_transport)
+furina_test(crypto_test crypto ${FURINA_ROOT}/tests/unit/crypto_test.cpp)
+target_link_libraries(crypto_test PRIVATE furina_transport)
 furina_test(session_consent_test session_consent ${FURINA_ROOT}/tests/unit/session_consent_test.cpp)
 target_link_libraries(session_consent_test PRIVATE furina_session)
 furina_offscreen_test(session_consent)
