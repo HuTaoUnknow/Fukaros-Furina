@@ -140,6 +140,7 @@ void MainWindow::bindPairingUi() {
 }
 
 void MainWindow::clearPairingQr() {
+    cfg->qrImage->setMinimumSize(0, 0);
     cfg->qrImage->clear();
     cfg->qrHint->setText("二维码由本机显示，平板用相机扫描。约 2 分钟内有效，只能使用一次。\n"
                          "EN: The PC shows the QR code. Scan it with the tablet camera. "
@@ -216,6 +217,7 @@ void MainWindow::showPairingQr() {
     m_oneTimeSecret = secret;
     m_oneTimeExpiry = payload.expiry;
     m_oneTimeListen = true;
+    cfg->qrImage->setMinimumSize(image.size());
     cfg->qrImage->setPixmap(QPixmap::fromImage(image));
     if (!m_castUi->locked())
         m_castUi->lockPending();

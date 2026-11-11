@@ -1,6 +1,7 @@
 #include <QtTest>
 #include <QDateTime>
 #include <QFile>
+#include <QPainter>
 #include <QSettings>
 #include <QTcpSocket>
 #include <QUrl>
@@ -112,6 +113,101 @@ class PairingTest : public QObject {
         QVERIFY(!image.isNull());
         const auto read = pairingReadQrImage(image);
         QCOMPARE(read, QStringList{text});
+    }
+
+    void cameraUprightDegreesMatchSensorAndDisplay() {
+        QCOMPARE(pairingCameraUprightDegrees(90, 0, false), 90);
+        QCOMPARE(pairingCameraUprightDegrees(90, 180, false), 270);
+        QCOMPARE(pairingCameraUprightDegrees(270, 180, false), 90);
+        QCOMPARE(pairingCameraUprightDegrees(90, 90, false), 0);
+        QCOMPARE(pairingCameraUprightDegrees(90, 270, false), 180);
+        QCOMPARE(pairingCameraUprightDegrees(0, 180, false), 180);
+        QCOMPARE(pairingCameraUprightDegrees(270, 0, true), 270);
+        QCOMPARE(pairingCameraUprightDegrees(90, 180, true), 270);
+    }
+
+    void clockwiseRotationMovesTheTopLeftCorner() {
+        QImage image(4, 6, QImage::Format_Grayscale8);
+        image.fill(0);
+        image.scanLine(0)[0] = 255;
+        const auto right = pairingRotateClockwise(image, 90);
+        QCOMPARE(right.size(), QSize(6, 4));
+        QCOMPARE(int(right.constScanLine(0)[5]), 255);
+        const auto down = pairingRotateClockwise(image, 180);
+        QCOMPARE(int(down.constScanLine(5)[3]), 255);
+        const auto left = pairingRotateClockwise(image, 270);
+        QCOMPARE(left.size(), QSize(6, 4));
+        QCOMPARE(int(left.constScanLine(3)[0]), 255);
+        QCOMPARE(int(pairingRotateClockwise(image, 0).constScanLine(0)[0]), 255);
+    }
+
+    QImage cameraView(const QImage& code, int frameWidth, int frameHeight, int codeEdge) {
+        QImage frame(frameWidth, frameHeight, QImage::Format_RGB32);
+        frame.fill(Qt::white);
+        const QImage scaled = code.scaled(codeEdge, codeEdge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QPainter painter(&frame);
+        painter.drawImage((frameWidth - scaled.width()) / 2, (frameHeight - scaled.height()) / 2, scaled);
+        return frame;
+    }
+
+    QByteArray packLuma(const QImage& image, int rowStride, int pixelStride, bool shortLastRow) {
+        const QImage gray = image.convertToFormat(QImage::Format_Grayscale8);
+        const int width = gray.width();
+        const int height = gray.height();
+        const int lastRow = (width - 1) * pixelStride + 1;
+        const int packedRows = shortLastRow ? height - 1 : height;
+        QByteArray bytes(rowStride * packedRows + (shortLastRow ? lastRow : 0), Qt::Uninitialized);
+        bytes.fill(char(0x3f));
+        for (int y = 0; y < height; ++y) {
+            const uchar* row = gray.constScanLine(y);
+            uchar* dst = reinterpret_cast<uchar*>(bytes.data()) + y * rowStride;
+            for (int x = 0; x < width; ++x)
+                dst[x * pixelStride] = row[x];
+        }
+        return bytes;
+    }
+
+    void stridedLumaAndUprightRotationDecodeFukarosQr() {
+        const auto secret = pairingGenerateOneTimeSecret();
+        PairingPayload payload;
+        payload.host = "192.168.1.23";
+        payload.port = kPairingQrPort;
+        payload.secret = secret;
+        payload.fingerprint = pairingPublicKeyFingerprint(QByteArray(32, 'K'));
+        payload.expiry = 1700000000;
+        const auto text = pairingEncodePayload(payload);
+        const QImage code = pairingQrImage(text);
+        QVERIFY2(!code.isNull(), qPrintable(QString("payload %1 bytes").arg(text.size())));
+        const int modules = code.width() / kPairingQrScale - 8;
+        QVERIFY2(modules >= 21 && modules % 4 == 1, qPrintable(QString("qr %1 px modules %2").arg(code.width()).arg(modules)));
+
+        for (int upright : {0, 90, 180, 270}) {
+            const auto sensor = pairingRotateClockwise(code, (360 - upright) % 360);
+            const int pixelStride = upright == 270 ? 2 : 1;
+            const int rowStride = sensor.width() * pixelStride + 24;
+            const auto packed = packLuma(sensor, rowStride, pixelStride, upright == 180 || upright == 270);
+            const auto luma = pairingExtractLuma(reinterpret_cast<const uchar*>(packed.constData()), packed.size(),
+                                                  sensor.width(), sensor.height(), rowStride, pixelStride);
+            const auto restored = pairingRotateClockwise(luma, upright);
+            const auto read = pairingReadQrImage(restored);
+            QVERIFY2(read == QStringList{text},
+                     qPrintable(QString("upright %1 source %2x%3").arg(upright).arg(code.width()).arg(modules)));
+        }
+
+        QString scales;
+        for (int edge : {192, 256, 320, 384, 512}) {
+            const bool ok = pairingReadQrImage(cameraView(code, 1280, 720, edge)).contains(text);
+            scales += QString(" %1:%2").arg(edge).arg(ok ? "ok" : "miss");
+        }
+        QVERIFY2(scales.contains("192:ok") && scales.contains("320:ok") && scales.contains("384:ok"),
+                 qPrintable(QString("source %1 modules %2%3").arg(code.width()).arg(modules).arg(scales)));
+        for (int upright : {0, 90, 180, 270}) {
+            const auto scene = cameraView(code, 1280, 720, 384);
+            const QImage sensor = pairingRotateClockwise(scene, (360 - upright) % 360).convertToFormat(QImage::Format_Grayscale8);
+            const auto luma = pairingExtractLuma(sensor.constBits(), int(sensor.sizeInBytes()), sensor.width(),
+                                                  sensor.height(), sensor.bytesPerLine(), 1);
+            QCOMPARE(pairingReadQrImage(pairingRotateClockwise(luma, upright)), QStringList{text});
+        }
     }
 
     void fingerprintPinAndMigration() {

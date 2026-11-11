@@ -6,7 +6,7 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("Furina");
     QCoreApplication::setApplicationName("Furina");
-    QCoreApplication::setApplicationVersion("0.4.20");
+    QCoreApplication::setApplicationVersion("0.5.0");
     furinaMigrateSettings("black_furina");
     MainWindow w;
     w.show();
