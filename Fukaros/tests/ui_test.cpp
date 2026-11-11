@@ -426,8 +426,10 @@ class UiTest : public QObject {
         presentation->setActive(true);
         QTRY_VERIFY(w.isFullScreen());
         QVERIFY(!w.findChild<QWidget*>("sidebar")->isVisible());
-        QCOMPARE(view->mapTo(w.centralWidget(), QPoint()), QPoint());
-        QCOMPARE(view->size(), w.centralWidget()->size());
+        // Offscreen marks the window fullscreen before applying the screen resize,
+        // so the hidden sidebar still occupies 48px until that resize is processed.
+        QTRY_COMPARE(view->mapTo(w.centralWidget(), QPoint()), QPoint());
+        QTRY_COMPARE(view->size(), w.centralWidget()->size());
 #ifdef Q_OS_WIN
         QVERIFY(w.windowFlags().testFlag(Qt::FramelessWindowHint));
 #endif
