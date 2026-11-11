@@ -56,7 +56,10 @@
             <item>
              <widget class="QLineEdit" name="token">
               <property name="placeholderText">
-               <string>至少 6 位，与对端一致</string>
+               <string>至少 12 位，含字母和数字</string>
+              </property>
+              <property name="maxLength">
+               <number>64</number>
               </property>
               <property name="readOnly">
                <bool>false</bool>
@@ -102,16 +105,45 @@
                  <string>配对设置</string>
                 </property>
                 <property name="steps" stdset="0">
-                 <string>1. 在平板 Furina 的设置中查看配对码。
-2. 在电脑 Fukaros 填入相同的配对码，至少 6 位。
-3. 保存两端设置，再选择投屏方向并按开始。
-4. 对端点击“同意”后开始投屏。</string>
+                 <string>1. 把这里的配对码填到电脑 Fukaros，或点“扫描二维码”扫描电脑上的二维码。
+2. 手动配对码至少 12 位，只能使用字母 A–Z（不含 I、O）和数字 2–9，并且同时包含字母和数字。
+3. 不能是同一个字符重复，也不能包含 ABCD、2345 这类简单序列。
+4. 二维码约 2 分钟有效，只能使用一次。过期后在电脑上重新显示。
+5. 手动配对时本机按开始，等待电脑连接。
+EN: Manual codes are at least 12 characters from A-Z (no I or O) and digits 2-9, with both a letter and a digit. Scan the one-time QR code on the PC with the camera.</string>
                 </property>
                </widget>
               </item>
              </layout>
             </item>
            </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="tokenHint">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="scanQr">
+            <property name="text">
+             <string>扫描二维码</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="qrHint">
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>用相机扫描电脑上的配对二维码，或在上方填写手动配对码。</string>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>

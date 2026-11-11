@@ -27,6 +27,47 @@ add_library(furina_transport STATIC
 target_include_directories(furina_transport PUBLIC ${FURINA_ROOT}/core/transport)
 target_link_libraries(furina_transport PUBLIC furina_protocol Qt6::Network Qt6::Gui)
 
+add_library(furina_pairing STATIC
+    ${FURINA_ROOT}/core/pairing/pairing_code.cpp
+    ${FURINA_ROOT}/core/pairing/pairing_code.h
+    ${FURINA_ROOT}/core/pairing/pairing_payload.cpp
+    ${FURINA_ROOT}/core/pairing/pairing_payload.h
+    ${FURINA_ROOT}/core/pairing/pairing_identity.cpp
+    ${FURINA_ROOT}/core/pairing/pairing_identity.h
+    ${FURINA_ROOT}/core/pairing/pairing_session.cpp
+    ${FURINA_ROOT}/core/pairing/pairing_session.h
+    ${FURINA_ROOT}/core/pairing/pairing_qr.cpp
+    ${FURINA_ROOT}/core/pairing/pairing_qr.h
+    ${FURINA_ROOT}/core/pairing/pairing_camera.cpp
+    ${FURINA_ROOT}/core/pairing/pairing_camera.h
+    ${FURINA_ROOT}/core/pairing/secret_store.cpp
+    ${FURINA_ROOT}/core/pairing/secret_store.h
+    ${FURINA_ROOT}/core/pairing/third_party/nayuki/qrcodegen.cpp
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/quirc.c
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/decode.c
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/identify.c
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/version_db.c
+)
+target_include_directories(furina_pairing PUBLIC ${FURINA_ROOT}/core/pairing)
+target_include_directories(furina_pairing PRIVATE
+    ${FURINA_ROOT}/core/pairing/third_party/nayuki
+    ${FURINA_ROOT}/core/pairing/third_party/quirc)
+target_link_libraries(furina_pairing PUBLIC furina_transport Qt6::Gui)
+if(WIN32)
+    target_sources(furina_pairing PRIVATE ${FURINA_ROOT}/core/pairing/secret_store_dpapi.cpp)
+    target_link_libraries(furina_pairing PUBLIC crypt32)
+elseif(ANDROID)
+    target_sources(furina_pairing PRIVATE ${FURINA_ROOT}/core/pairing/secret_store_android.cpp)
+else()
+    target_sources(furina_pairing PRIVATE ${FURINA_ROOT}/core/pairing/secret_store_memory.cpp)
+endif()
+set_source_files_properties(
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/quirc.c
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/decode.c
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/identify.c
+    ${FURINA_ROOT}/core/pairing/third_party/quirc/version_db.c
+    PROPERTIES SKIP_AUTOMOC ON SKIP_AUTOUIC ON SKIP_AUTORCC ON)
+
 add_library(furina_widgets STATIC
     ${FURINA_ROOT}/ui/widgets/screenview.cpp
     ${FURINA_ROOT}/ui/widgets/screenview.h

@@ -210,12 +210,12 @@ class UiTest : public QObject {
         DisplaySettingsProbe probe;
         QDesktopServices::setUrlHandler("ms-settings", &probe, "open");
         Peer server;
-        QVERIFY(server.listen(27183, "extension-flow-test", "127.0.0.2"));
+        QVERIFY(server.listen(27183, "H3R8K2M7Q4P9", "127.0.0.2"));
         QSignalSpy approvals(&server, &Peer::approval), video(&server, &Peer::video);
         MainWindow window;
         window.show();
         window.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        window.findChild<QLineEdit*>("token")->setText("extension-flow-test");
+        window.findChild<QLineEdit*>("token")->setText("H3R8K2M7Q4P9");
         window.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         window.findChild<QCheckBox*>("share")->click();
         window.findChild<QCheckBox*>("extend")->setChecked(true);
@@ -304,7 +304,7 @@ class UiTest : public QObject {
 
     void usbNetworkDoesNotStartAdb() {
         MainWindow w;
-        w.findChild<QLineEdit*>("token")->setText("usb-ui-test-code");
+        w.findChild<QLineEdit*>("token")->setText("M4Q8R2K7P3N9");
         w.findChild<QLineEdit*>("adbPath")->setText("missing-adb.exe");
         w.findChild<QComboBox*>("usbMode")->setCurrentIndex(0);
         w.findChild<QLineEdit*>("usbHost")->clear();
@@ -496,10 +496,10 @@ class UiTest : public QObject {
         QVERIFY(tray && tray->available());
         // USB forwarding can already own 127.0.0.1:27183 on the developer PC.
         Peer server;
-        QVERIFY(server.listen(27183, "tray-test-code", "127.0.0.2"));
+        QVERIFY(server.listen(27183, "P9K2N7R4Q8M3", "127.0.0.2"));
         QSignalSpy approvals(&server, &Peer::approval);
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        w.findChild<QLineEdit*>("token")->setText("tray-test-code");
+        w.findChild<QLineEdit*>("token")->setText("P9K2N7R4Q8M3");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         w.findChild<QCheckBox*>("receive")->click();
         auto* start = w.findChild<QPushButton*>("start");
@@ -553,7 +553,7 @@ class UiTest : public QObject {
         QTcpServer transport;
         QVERIFY(transport.listen(QHostAddress::AnyIPv4, 27183));
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        w.findChild<QLineEdit*>("token")->setText("control-test-code");
+        w.findChild<QLineEdit*>("token")->setText("R8N3Q7K2M9P4");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         button->click();
         QCOMPARE(control->state(), CastControl::Waiting);
@@ -613,7 +613,7 @@ class UiTest : public QObject {
     void remoteScreenAndInput() {
         qRegisterMetaType<fr_gesture>();
         Peer server;
-        QVERIFY(server.listen(27183, "ui-test-code"));
+        QVERIFY(server.listen(27183, "Q2M8K4R9N3P7"));
         MainWindow w;
         w.show();
         auto* view = w.findChild<ScreenView*>();
@@ -636,7 +636,7 @@ class UiTest : public QObject {
         auto* dialog = w.findChild<QDialog*>("SettingsDialog");
         QTRY_VERIFY(dialog->isVisible());
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        w.findChild<QLineEdit*>("token")->setText("ui-test-code");
+        w.findChild<QLineEdit*>("token")->setText("Q2M8K4R9N3P7");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         dialog->accept();
         auto* client = w.findChild<Peer*>();
