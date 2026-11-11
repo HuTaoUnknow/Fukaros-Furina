@@ -62,7 +62,14 @@ extern "C" JNIEXPORT void JNICALL Java_com_furina_black_PairingCamera_nativeFini
 }
 
 void pairingStartCameraScan(QObject* context, PairingScanCallback callback) {
-    QCoreApplication::requestPermission(QCameraPermission{}, context, [callback](const QPermission& permission) {
+    // requestPermission is an instance method. A missing application still finishes the scan.
+    auto* app = QCoreApplication::instance();
+    if (!app) {
+        if (callback)
+            callback({});
+        return;
+    }
+    app->requestPermission(QCameraPermission{}, context, [callback](const QPermission& permission) {
         if (permission.status() != Qt::PermissionStatus::Granted) {
             if (callback)
                 callback({});
