@@ -258,6 +258,10 @@ void MainWindow::connectTransportEvents() {
         });
     });
     connect(&m_peer, &Peer::disconnected, this, [this] {
+        // ready() clears on the IO thread before this queued slot runs. A portrait
+        // preview can already be fullscreen by then. Only an open session may take
+        // that fullscreen and its image down with the socket.
+        const bool live = m_sessionActive || m_pending || m_castUi->occupied();
         m_android.keepSession(false);
         m_castUi->connectionLost();
         if (m_castUi->occupied())
@@ -270,9 +274,11 @@ void MainWindow::connectTransportEvents() {
         m_pending = false;
         m_sessionActive = false;
         m_remoteMax = false;
-        m_presentation->setActive(false);
-        furinaSetMaximizeIcon(ui->maximize, false);
-        m_view->setImage({});
+        if (live) {
+            m_presentation->setActive(false);
+            m_view->setImage({});
+        }
+        furinaSetMaximizeIcon(ui->maximize, m_presentation->active());
     });
     connect(&m_android, &AndroidBridge::captureStopped, this, [this] {
         if (!m_sharing)
