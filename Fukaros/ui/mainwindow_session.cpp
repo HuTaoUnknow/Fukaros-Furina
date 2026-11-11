@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 #include "cast_direction_settings.h"
+#include "pairing_code.h"
+#include "pairing_session.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
@@ -28,9 +30,12 @@ void MainWindow::start() {
     }
     if (m_pending)
         return;
-    if (cfg->token->text().size() < 6) {
-        log("请在设置中填写至少 6 位的配对码。",
-            "Enter a pairing code with at least 6 characters in Settings.");
+    PairingCredential credential;
+    credential.kind = PairingSecretKind::ManualCode;
+    credential.secret = pairingNormalizeManualCode(cfg->token->text());
+    const auto code = pairingCheckManualCode(credential.secret);
+    if (!code.ok) {
+        log(code.chinese, code.english);
         openSettings();
         return;
     }
@@ -50,7 +55,7 @@ void MainWindow::start() {
             return;
         }
         log("正在通过 Wi-Fi 连接平板。", "Connecting to the tablet over Wi-Fi.");
-        m_peer.connectTo(cfg->host->text().trimmed(), 27183, cfg->token->text());
+        pairingConnect(m_peer, cfg->host->text().trimmed(), 27183, credential);
     } else {
         if (cfg->usbMode->currentIndex() == 0) {
             m_usbNetwork.start(cfg->usbHost->text());
@@ -95,13 +100,16 @@ void MainWindow::start() {
 }
 
 void MainWindow::connectUsb(int generation) {
+    PairingCredential credential;
+    credential.kind = PairingSecretKind::ManualCode;
+    credential.secret = pairingNormalizeManualCode(cfg->token->text());
     m_adb.run(
         {"forward", "tcp:27183", "tcp:27183"},
-        [this, generation](bool ok, QByteArray) {
+        [this, generation, credential](bool ok, QByteArray) {
             if (generation != m_generation)
                 return;
             if (ok)
-                m_peer.connectTo("127.0.0.1", 27183, cfg->token->text());
+                pairingConnect(m_peer, QStringLiteral("127.0.0.1"), 27183, credential);
             else {
                 m_pending = false;
                 m_castUi->connectionLost();
@@ -111,6 +119,12 @@ void MainWindow::connectUsb(int generation) {
 }
 
 void MainWindow::stop() {
+    m_oneTimeListen = false;
+    m_oneTimeSecret.clear();
+    m_oneTimeExpiry = 0;
+    m_qrExpiry.stop();
+    if (cfg && cfg->qrImage)
+        cfg->qrImage->clear();
     m_presentationSync->reset();
     m_castUi->reset();
     m_consent->cancel();
@@ -293,7 +307,10 @@ void MainWindow::connectTransportEvents() {
                 log(QString("USB 网络直连：%1 → %2（%3），无需 USB 调试。").arg(local, host, name),
                     QString("Direct USB network: %1 -> %2 (%3). USB debugging is not required.")
                         .arg(local, host, name));
-                m_peer.connectTo(host, 27183, cfg->token->text(), local);
+                PairingCredential credential;
+                credential.kind = PairingSecretKind::ManualCode;
+                credential.secret = pairingNormalizeManualCode(cfg->token->text());
+                pairingConnect(m_peer, host, 27183, credential, local);
             });
     connect(&m_adb, &Adb::status, this, [this](const QString& message) { log(message); });
     connect(&m_peer, &Peer::frame, this, [this](const QImage& image) {
@@ -303,12 +320,18 @@ void MainWindow::connectTransportEvents() {
     connect(m_view, &ScreenView::gesture, this, &MainWindow::gesture);
     connect(&m_peer, &Peer::session, this, &MainWindow::session);
     connect(&m_peer, &Peer::connected, this, [this] {
+        if (m_oneTimeListen) {
+            clearPairingQr();
+            log("平板已通过二维码配对。", "The tablet paired with the QR code.");
+        }
         if (m_pending) {
             m_pending = false;
             requestDirection();
         }
     });
     connect(&m_peer, &Peer::disconnected, this, [this] {
+        if (m_oneTimeListen)
+            QMetaObject::invokeMethod(this, [this] { retireOneTimeListener(); }, Qt::QueuedConnection);
         m_castUi->connectionLost();
         if (m_castUi->occupied())
             log("连接已中断，请点击停止释放投屏方式。",

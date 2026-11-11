@@ -21,7 +21,7 @@ set_source_files_properties(
 )
 
 target_include_directories(furina_app PUBLIC ui)
-target_link_libraries(furina_app PUBLIC furina_android_bridge furina_session furina_settings furina_video)
+target_link_libraries(furina_app PUBLIC furina_android_bridge furina_session furina_settings furina_video furina_pairing)
 qt_add_executable(Furina main.cpp resources.qrc)
 target_link_libraries(Furina PRIVATE furina_app)
 if(ANDROID)

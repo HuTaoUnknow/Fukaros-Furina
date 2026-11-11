@@ -76,12 +76,20 @@ class MainWindow : public QMainWindow {
     QPointer<QScreen> m_captureScreen;
     QString m_captureName;
     bool m_adbOnly = false, m_sharing = false, m_pending = false, m_sessionActive = false,
-         m_remoteMax = false;
+         m_remoteMax = false, m_oneTimeListen = false;
+    QString m_oneTimeSecret;
+    qint64 m_oneTimeExpiry = 0;
+    QTimer m_qrExpiry;
     int m_generation = 0;
     void log(const QString& message, const QString& english = {});
     void loadSettings();
     void saveSettings();
     void openSettings();
+    void bindPairingUi();
+    void refreshPairingHint();
+    void showPairingQr();
+    void clearPairingQr();
+    void retireOneTimeListener();
     void configureAdb();
     void start();
     void stop();

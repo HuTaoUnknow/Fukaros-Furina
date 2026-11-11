@@ -97,6 +97,7 @@ void MainWindow::setupInterface() {
     m_castUi = new CastUiState(this);
     m_castControl = new CastControl(this, m_castUi, &m_peer);
     m_layout = new MobileLayout(this);
+    bindPairingUi();
 }
 
 void MainWindow::connectActions() {

@@ -1,11 +1,22 @@
 #include "mainwindow.h"
 #include "cast_direction_settings.h"
+#include "debug_log.h"
+#include "pairing_camera.h"
+#include "pairing_code.h"
+#include "pairing_identity.h"
+#include "pairing_payload.h"
+#include "pairing_session.h"
 #include "screen_scale_settings.h"
+#include "secret_store.h"
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
+#include <QDateTime>
+#include <QDialogButtonBox>
+#include <QLabel>
+#include <QPlainTextEdit>
 #include <QSettings>
-#include <QRandomGenerator>
+#include <QVBoxLayout>
 #include <QNetworkInterface>
 #include <QGuiApplication>
 #include <QScreen>
@@ -27,7 +38,9 @@ void MainWindow::loadSettings() {
     cfg->connectionTabs->setCurrentIndex(s.value("connectionTab", 0).toInt() == 1 ? 1 : 0);
     cfg->host->setText(s.value("host", "0.0.0.0").toString());
     cfg->serial->setText(s.value("serial", m_android.deviceCode()).toString());
-    cfg->token->setText(s.value("token").toString());
+    cfg->token->setText(QString::fromUtf8(
+        pairingMigratePlaintext(SecretStore::instance(), s, QStringLiteral("token"), QStringLiteral("manual-code"))));
+    refreshPairingHint();
     cfg->allowControl->setChecked(s.value("allowControl", false).toBool());
 }
 
@@ -38,7 +51,13 @@ void MainWindow::saveSettings() {
     s.setValue("connectionTab", cfg->connectionTabs->currentIndex());
     s.setValue("host", cfg->host->text());
     s.setValue("serial", cfg->serial->text());
-    s.setValue("token", cfg->token->text());
+    const auto code = pairingNormalizeManualCode(cfg->token->text());
+    auto& secrets = SecretStore::instance();
+    if (code.isEmpty())
+        secrets.remove(QStringLiteral("manual-code"));
+    else if (!secrets.store(QStringLiteral("manual-code"), code.toUtf8()))
+        log("配对码未能写入安全存储。", "Could not store the pairing code.");
+    s.remove(QStringLiteral("token"));
     s.setValue("allowControl", cfg->allowControl->isChecked());
     s.setValue("castMode", ui->extend->isChecked() ? 1 : 0);
 }
@@ -105,8 +124,12 @@ void MainWindow::initializeSettings() {
         }
     });
     QSettings s;
-    if (s.value("token").toString().size() < 6)
-        s.setValue("token", QString::number(QRandomGenerator::system()->bounded(100000000, 999999999)));
+    auto& store = SecretStore::instance();
+    if (pairingMigratePlaintext(store, s, QStringLiteral("token"), QStringLiteral("manual-code")).isEmpty()) {
+        const auto generated = pairingGenerateManualCode();
+        if (!generated.isEmpty())
+            store.store(QStringLiteral("manual-code"), generated.toUtf8());
+    }
     loadSettings();
     new PointerSettings(&m_peer, this, false);
     new ScreenScaleSettings(&m_peer, this, false);
@@ -120,4 +143,57 @@ void MainWindow::initializeSettings() {
     modeGroup->setExclusive(true);
     if (s.value("castMode", 0).toInt() == 1)
         ui->extend->setChecked(true);
+}
+
+void MainWindow::refreshPairingHint() {
+    const auto text = cfg->token->text();
+    if (text.trimmed().isEmpty()) {
+        cfg->tokenHint->clear();
+        return;
+    }
+    const auto check = pairingCheckManualCode(text);
+    cfg->tokenHint->setText(check.ok ? QString() : furinaStatus(check.chinese, check.english));
+}
+
+void MainWindow::bindPairingUi() {
+    connect(cfg->token, &QLineEdit::textChanged, this, [this] { refreshPairingHint(); });
+    connect(cfg->scanQr, &QPushButton::clicked, this, &MainWindow::scanPairingQr);
+}
+
+void MainWindow::scanPairingQr() {
+    if (m_castUi->locked()) {
+        log("投屏方式已锁定，请点击停止后修改设置。",
+            "Casting options are locked. Press Stop to change settings.");
+        return;
+    }
+#ifdef Q_OS_ANDROID
+    pairingStartCameraScan(this, [this](const QString& payload) {
+        if (payload.isEmpty()) {
+            log("没有扫到配对二维码。", "No pairing QR code was scanned.");
+            return;
+        }
+        pairFromQrPayload(payload);
+    });
+#else
+    auto* dialog = new QDialog(this);
+    dialog->setWindowTitle("扫描二维码");
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    auto* layout = new QVBoxLayout(dialog);
+    auto* help = new QLabel(
+        "桌面模拟没有平板相机。请把电脑上的配对内容粘贴到下面。平板会直接打开相机。\n"
+        "EN: Desktop simulation has no tablet camera. Paste the pairing payload. The tablet opens the camera.",
+        dialog);
+    help->setWordWrap(true);
+    auto* edit = new QPlainTextEdit(dialog);
+    edit->setPlaceholderText("fukaros://pair?...");
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    layout->addWidget(help);
+    layout->addWidget(edit);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    connect(dialog, &QDialog::accepted, this, [this, edit] { pairFromQrPayload(edit->toPlainText().trimmed()); });
+    dialog->resize(520, 280);
+    dialog->open();
+#endif
 }

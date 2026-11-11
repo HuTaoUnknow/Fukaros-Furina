@@ -40,7 +40,7 @@ set_source_files_properties(
 )
 
 target_include_directories(fukaros_app PUBLIC ui)
-target_link_libraries(fukaros_app PUBLIC fukaros_platform furina_video)
+target_link_libraries(fukaros_app PUBLIC fukaros_platform furina_video furina_pairing)
 
 qt_add_executable(Fukaros main.cpp resources.qrc)
 target_link_libraries(Fukaros PRIVATE fukaros_app)
