@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Furina VERSION 0.4.20 LANGUAGES C CXX)
+project(Furina VERSION 0.5.0 LANGUAGES C CXX)
 include(../cmake/ProjectDefaults.cmake)
 set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/forms")
 

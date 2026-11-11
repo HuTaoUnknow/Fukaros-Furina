@@ -587,3 +587,18 @@ bool CursorChannel::pop(QByteArray* packet) {
     return true;
 }
 
+QByteArray furinaX25519Secret() {
+    QByteArray secret(32, 0);
+    random32(reinterpret_cast<uint8_t*>(secret.data()));
+    return secret;
+}
+
+QByteArray furinaX25519PublicKey(const QByteArray& secretKey) {
+    if (secretKey.size() != 32)
+        return {};
+    QByteArray publicKey(32, 0);
+    crypto_x25519_public_key(reinterpret_cast<uint8_t*>(publicKey.data()),
+                              reinterpret_cast<const uint8_t*>(secretKey.constData()));
+    return publicKey;
+}
+

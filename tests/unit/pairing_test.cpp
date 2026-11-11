@@ -2,12 +2,15 @@
 #include <QDateTime>
 #include <QFile>
 #include <QSettings>
+#include <QTcpSocket>
 #include <QUrl>
+#include "furina_channel.h"
 #include "pairing_code.h"
 #include "pairing_identity.h"
 #include "pairing_payload.h"
 #include "pairing_qr.h"
 #include "pairing_session.h"
+#include "peer.h"
 #include "secret_store.h"
 
 class PairingTest : public QObject {
@@ -24,8 +27,11 @@ class PairingTest : public QObject {
         settings.sync();
         SecretStore store(settings);
         for (const auto& key : {QStringLiteral("manual-code"), QStringLiteral("used-secrets"),
-                                QStringLiteral("desktop-public-key")})
+                                QStringLiteral("desktop-public-key"), QStringLiteral("desktop-x25519-secret"),
+                                QStringLiteral("channel-long-term-key")}) {
             store.remove(key);
+            SecretStore::instance().remove(key);
+        }
     }
 
     void manualCodeRules() {
@@ -137,6 +143,81 @@ class PairingTest : public QObject {
         QVERIFY(!blob.isEmpty());
         QVERIFY(!blob.contains(legacy.toUtf8()));
 #endif
+    }
+
+    void desktopKeyIsTheChannelX25519PublicKey() {
+        QSettings settings;
+        SecretStore store(settings);
+        const auto key = pairingDesktopPublicKey(store);
+        const auto secret = store.load(QStringLiteral("desktop-x25519-secret"));
+        QCOMPARE(key.size(), 32);
+        QCOMPARE(secret.size(), 32);
+        QCOMPARE(furinaX25519PublicKey(secret), key);
+        QVERIFY(key != secret);
+        QCOMPARE(pairingDesktopPublicKey(store), key);
+        QVERIFY(store.load(QStringLiteral("desktop-public-key")).isEmpty());
+    }
+
+    void handshakeUsesTheQrSecretAndTheManualCode() {
+        PairingCredential manual;
+        manual.kind = PairingSecretKind::ManualCode;
+        manual.secret = QStringLiteral("A2B3C4D5E6F7");
+        Peer server;
+        Peer client;
+        QVERIFY(pairingListen(server, 0, manual, QStringLiteral("127.0.0.1")));
+        QVERIFY(server.serverPort() != 0);
+        QVERIFY(pairingConnect(client, QStringLiteral("127.0.0.1"), server.serverPort(), manual));
+        QTRY_VERIFY_WITH_TIMEOUT(server.ready() && client.ready(), 5000);
+        const auto established = server.establishedLongTermKey();
+        QCOMPARE(established.size(), 32);
+        QCOMPARE(client.establishedLongTermKey(), established);
+        QTRY_COMPARE(SecretStore::instance().load(QStringLiteral("channel-long-term-key")), established);
+
+        PairingCredential other;
+        other.kind = PairingSecretKind::ManualCode;
+        other.secret = QStringLiteral("H3R8K2M7Q4P9");
+        Peer laterServer;
+        Peer laterClient;
+        QVERIFY(pairingListen(laterServer, 0, other, QStringLiteral("127.0.0.1")));
+        QVERIFY(pairingConnect(laterClient, QStringLiteral("127.0.0.1"), laterServer.serverPort(), manual));
+        QTRY_VERIFY_WITH_TIMEOUT(laterServer.ready() && laterClient.ready(), 5000);
+        QCOMPARE(laterServer.establishedLongTermKey(), established);
+
+        SecretStore::instance().remove(QStringLiteral("channel-long-term-key"));
+        Peer mismatchServer;
+        Peer mismatchClient;
+        QVERIFY(pairingListen(mismatchServer, 0, manual, QStringLiteral("127.0.0.1")));
+        QVERIFY(pairingConnect(mismatchClient, QStringLiteral("127.0.0.1"), mismatchServer.serverPort(), other));
+        QTest::qWait(350);
+        QVERIFY(!mismatchServer.ready());
+        QVERIFY(!mismatchClient.ready());
+        mismatchServer.close();
+        mismatchClient.close();
+
+        Peer legacyServer;
+        QVERIFY(pairingListen(legacyServer, 0, manual, QStringLiteral("127.0.0.1")));
+        QTcpSocket legacy;
+        legacy.connectToHost(QStringLiteral("127.0.0.1"), legacyServer.serverPort());
+        QTRY_COMPARE(legacy.state(), QAbstractSocket::ConnectedState);
+        legacy.write("FUR1");
+        legacy.flush();
+        QTRY_COMPARE(legacy.state(), QAbstractSocket::UnconnectedState);
+        QVERIFY(!legacyServer.ready());
+
+        const auto junk = QByteArray(32, 'K');
+        SecretStore::instance().store(QStringLiteral("channel-long-term-key"), junk);
+        PairingCredential once;
+        once.kind = PairingSecretKind::OneTimeQr;
+        once.secret = pairingGenerateOneTimeSecret();
+        Peer qrServer;
+        Peer qrClient;
+        QVERIFY(pairingListen(qrServer, 0, once, QStringLiteral("127.0.0.1")));
+        QVERIFY(pairingConnect(qrClient, QStringLiteral("127.0.0.1"), qrServer.serverPort(), once));
+        QTRY_VERIFY_WITH_TIMEOUT(qrServer.ready() && qrClient.ready(), 5000);
+        QVERIFY(qrServer.establishedLongTermKey() != junk);
+        QCOMPARE(qrServer.establishedLongTermKey(), qrClient.establishedLongTermKey());
+        Peer replay;
+        QVERIFY(!pairingListen(replay, 0, once, QStringLiteral("127.0.0.1")));
     }
 
     void credentialKinds() {

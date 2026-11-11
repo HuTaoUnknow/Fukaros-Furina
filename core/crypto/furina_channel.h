@@ -110,3 +110,8 @@ class CursorChannel {
     quint64 m_sendCounter = 0;
     quint64 m_recvCounter = 0;
 };
+
+/* Desktop X25519 identity. The secret stays in the pairing store.
+   pairingDesktopPublicKey publishes only this 32-byte public key. */
+QByteArray furinaX25519Secret();
+QByteArray furinaX25519PublicKey(const QByteArray& secretKey);

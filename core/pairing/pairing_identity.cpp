@@ -1,7 +1,8 @@
 #include "pairing_identity.h"
+#include "furina_channel.h"
+#include "monocypher.h"
 #include <QCryptographicHash>
 #include <QList>
-#include <QRandomGenerator>
 #include <QUrl>
 
 namespace {
@@ -44,14 +45,17 @@ QString pairingPublicKeyFingerprint(const QByteArray& publicKey) {
 }
 
 QByteArray pairingDesktopPublicKey(SecretStore& store) {
-    const auto existing = store.load(QStringLiteral("desktop-public-key"));
-    if (existing.size() == 32)
-        return existing;
-    QByteArray created(32, 0);
-    QRandomGenerator::system()->generate(created.begin(), created.end());
-    if (!store.store(QStringLiteral("desktop-public-key"), created))
-        return {};
-    return created;
+    auto secret = store.load(QStringLiteral("desktop-x25519-secret"));
+    if (secret.size() != 32) {
+        secret = furinaX25519Secret();
+        if (secret.size() != 32 || !store.store(QStringLiteral("desktop-x25519-secret"), secret))
+            return {};
+    }
+    const auto publicKey = furinaX25519PublicKey(secret);
+    secret.detach();
+    crypto_wipe(secret.data(), size_t(secret.size()));
+    secret.fill('\0');
+    return publicKey;
 }
 
 bool pairingPinPublicKey(SecretStore& store, const QString& host, const QString& fingerprint) {
