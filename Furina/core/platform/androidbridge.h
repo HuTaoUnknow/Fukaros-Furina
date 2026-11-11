@@ -24,6 +24,7 @@ class AndroidBridge : public QObject {
     void receiveCursor(const QByteArray& packet);
     void keepSession(bool active);
     void backgroundTask();
+    void scanPairingQr();
     void updateVideoView(const QRect& physicalRect, bool visible, bool fullscreen);
     std::atomic_bool wantFrame{false}, pending{false};
     std::atomic_int videoPending{0};
@@ -38,4 +39,5 @@ class AndroidBridge : public QObject {
     void exitFullscreen();
     void backRequested();
     void stopRequested();
+    void pairingQr(const QString& text);
 };

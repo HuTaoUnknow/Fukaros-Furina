@@ -1,6 +1,7 @@
 #include "network_discovery.h"
 #include <QNetworkDatagram>
 #include <QNetworkProxy>
+#include <QNetworkInterface>
 
 static bool validNonce(const QByteArray& nonce) {
     if (nonce.size() != 32)
@@ -41,6 +42,38 @@ NetworkDiscoveryServer::NetworkDiscoveryServer(QObject* parent) : QObject(parent
             m_socket.writeDatagram(answer);
         }
     });
+}
+
+static void lanAddresses(QString* usb, QString* other) {
+    for (const auto& interface : QNetworkInterface::allInterfaces()) {
+        if (!(interface.flags() & QNetworkInterface::IsUp))
+            continue;
+        const auto name = interface.name();
+        const bool wired = name.startsWith("rndis") || name.startsWith("usb") || name.startsWith("ncm");
+        for (const auto& entry : interface.addressEntries()) {
+            const auto ip = entry.ip();
+            if (ip.protocol() != QAbstractSocket::IPv4Protocol || ip.isLoopback())
+                continue;
+            if (wired)
+                *usb = ip.toString();
+            else
+                *other = ip.toString();
+        }
+    }
+}
+
+QString furinaUsbAddress() {
+    QString usb, other;
+    lanAddresses(&usb, &other);
+    return usb;
+}
+
+QString furinaLanAddress(bool preferUsb) {
+    QString usb, other;
+    lanAddresses(&usb, &other);
+    if (preferUsb && !usb.isEmpty())
+        return usb;
+    return !other.isEmpty() ? other : usb;
 }
 
 bool NetworkDiscoveryServer::start(const QString& bindAddress, quint16 port) {

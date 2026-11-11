@@ -83,8 +83,8 @@ class UiTest : public QObject {
         auto* maximize = w.findChild<QPushButton*>("maximize");
         Peer other;
         QSignalSpy actions(&other, &Peer::session);
-        QVERIFY(other.listen(29910, "fullscreen-state-code", "127.0.0.1"));
-        peer->connectTo("127.0.0.1", 29910, "fullscreen-state-code");
+        QVERIFY(other.listen(29910, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        peer->connectTo("127.0.0.1", 29910, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(peer->ready() && other.ready());
         other.sendApproval(4801, FR_APPROVAL_REQUEST, FR_APPROVAL_RECEIVE);
         QTRY_VERIFY(consent->pending());
@@ -210,12 +210,12 @@ class UiTest : public QObject {
         DisplaySettingsProbe probe;
         QDesktopServices::setUrlHandler("ms-settings", &probe, "open");
         Peer server;
-        QVERIFY(server.listen(27183, "extension-flow-test", "127.0.0.2"));
+        QVERIFY(server.listen(27183, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.2"));
         QSignalSpy approvals(&server, &Peer::approval), video(&server, &Peer::video);
         MainWindow window;
         window.show();
         window.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        window.findChild<QLineEdit*>("token")->setText("extension-flow-test");
+        window.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         window.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         window.findChild<QCheckBox*>("share")->click();
         window.findChild<QCheckBox*>("extend")->setChecked(true);
@@ -304,7 +304,7 @@ class UiTest : public QObject {
 
     void usbNetworkDoesNotStartAdb() {
         MainWindow w;
-        w.findChild<QLineEdit*>("token")->setText("usb-ui-test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QLineEdit*>("adbPath")->setText("missing-adb.exe");
         w.findChild<QComboBox*>("usbMode")->setCurrentIndex(0);
         w.findChild<QLineEdit*>("usbHost")->clear();
@@ -346,8 +346,8 @@ class UiTest : public QObject {
         auto* view = w.findChild<ScreenView*>();
         Peer other;
         QSignalSpy approvals(&other, &Peer::approval);
-        QVERIFY(other.listen(29903, "stop-sync-code"));
-        peer->connectTo("127.0.0.1", 29903, "stop-sync-code");
+        QVERIFY(other.listen(29903, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        peer->connectTo("127.0.0.1", 29903, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(peer->ready() && other.ready());
         // Authentication alone is idle, and consent is still a waiting state.
         QCOMPARE(control->state(), CastControl::Start);
@@ -496,10 +496,10 @@ class UiTest : public QObject {
         QVERIFY(tray && tray->available());
         // USB forwarding can already own 127.0.0.1:27183 on the developer PC.
         Peer server;
-        QVERIFY(server.listen(27183, "tray-test-code", "127.0.0.2"));
+        QVERIFY(server.listen(27183, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.2"));
         QSignalSpy approvals(&server, &Peer::approval);
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        w.findChild<QLineEdit*>("token")->setText("tray-test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         w.findChild<QCheckBox*>("receive")->click();
         auto* start = w.findChild<QPushButton*>("start");
@@ -553,7 +553,7 @@ class UiTest : public QObject {
         QTcpServer transport;
         QVERIFY(transport.listen(QHostAddress::AnyIPv4, 27183));
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        w.findChild<QLineEdit*>("token")->setText("control-test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         button->click();
         QCOMPARE(control->state(), CastControl::Waiting);
@@ -602,7 +602,7 @@ class UiTest : public QObject {
     void invalidConnectionReleasesPendingLock() {
         MainWindow w;
         w.findChild<QLineEdit*>("host")->setText("invalid-ip");
-        w.findChild<QLineEdit*>("token")->setText("test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         w.findChild<QPushButton*>("start")->click();
         QVERIFY(!w.findChild<CastUiState*>()->locked());
@@ -613,7 +613,7 @@ class UiTest : public QObject {
     void remoteScreenAndInput() {
         qRegisterMetaType<fr_gesture>();
         Peer server;
-        QVERIFY(server.listen(27183, "ui-test-code"));
+        QVERIFY(server.listen(27183, "ABCD-EFGH-JKLM-NPQR-ST23"));
         MainWindow w;
         w.show();
         auto* view = w.findChild<ScreenView*>();
@@ -636,7 +636,7 @@ class UiTest : public QObject {
         auto* dialog = w.findChild<QDialog*>("SettingsDialog");
         QTRY_VERIFY(dialog->isVisible());
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
-        w.findChild<QLineEdit*>("token")->setText("ui-test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         dialog->accept();
         auto* client = w.findChild<Peer*>();

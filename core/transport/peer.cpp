@@ -1,11 +1,49 @@
 #include "screen_scale.h"
 #include "peer.h"
-#include <QMessageAuthenticationCode>
+#include "secure_store.h"
 #include <QRandomGenerator>
+#include <QDateTime>
 #include <QBuffer>
 #include <QImageReader>
 #include <QNetworkProxy>
+#include <QHostAddress>
 #include "video_policy.h"
+
+namespace {
+void randomBytes(uint8_t* out, int n) {
+    for (int i = 0; i < n;) {
+        const quint32 value = QRandomGenerator::system()->generate();
+        for (int shift = 0; shift < 32 && i < n; shift += 8)
+            out[i++] = uint8_t(value >> shift);
+    }
+}
+
+struct RecordKeys {
+    uint8_t key[32]{};
+    uint8_t salt[16]{};
+    uint64_t counter = 0;
+};
+
+int takeRecord(QByteArray& cipher, RecordKeys& rec, QByteArray& plain) {
+    if (cipher.size() < 4)
+        return 0;
+    const auto* data = reinterpret_cast<const uint8_t*>(cipher.constData());
+    const auto len = fr_get_u32(data);
+    if (len > FR_MAX_PAYLOAD + FR_HEADER_SIZE)
+        return -1;
+    if (cipher.size() < int(4 + 16 + len))
+        return 0;
+    plain.resize(int(len));
+    size_t consumed = 0, out_n = 0;
+    const int rc = fr_record_open(rec.key, rec.salt, &rec.counter, data, size_t(cipher.size()), &consumed,
+                                  reinterpret_cast<uint8_t*>(plain.data()), size_t(plain.size()), &out_n);
+    if (rc == 1) {
+        cipher.remove(0, int(consumed));
+        plain.resize(int(out_n));
+    }
+    return rc;
+}
+} // namespace
 
 Peer::Peer(QObject* p) : QObject(p), m_cursor(this) {
     m_cursor.availability = [this](bool ready) { emit cursorConnection(ready); };
@@ -24,6 +62,16 @@ Peer::Peer(QObject* p) : QObject(p), m_cursor(this) {
                 }
                 continue;
             }
+            const auto now = QDateTime::currentMSecsSinceEpoch();
+            if (m_offerUsed || (m_expiresAtMs && now > m_expiresAtMs) || !fr_attempt_begin(&m_gate, now)) {
+                s->abort();
+                s->deleteLater();
+                emit status(m_offerUsed ? QString::fromUtf8(fr_security_error_text(FR_SEC_USED))
+                            : m_expiresAtMs && now > m_expiresAtMs
+                                ? QString::fromUtf8(fr_security_error_text(FR_SEC_EXPIRED))
+                                : QString::fromUtf8(fr_security_error_text(FR_SEC_LIMIT)));
+                continue;
+            }
             attach(s, true);
         }
     });
@@ -32,7 +80,8 @@ Peer::Peer(QObject* p) : QObject(p), m_cursor(this) {
         if (!m_socket)
             return;
         if ((!m_ready && m_session.elapsed() > 6000) || m_lastRx.elapsed() > 18000) {
-            fail(tr("Connection timeout"));
+            fail(!m_secure ? tr("Connection timeout. Update both devices to 0.4.21 if the peer is older.")
+                           : tr("Connection timeout"));
             return;
         }
         if (m_ready)
@@ -44,19 +93,100 @@ Peer::~Peer() {
     close();
 }
 
-bool Peer::listen(quint16 port, const QString& token, const QString& bindAddress) {
-    close();
-    if (token.size() < 6) {
-        emit status(tr("Pairing code requires at least 6 characters"));
+void Peer::setOfferWindow(qint64 expiresAtMs, bool singleUse) {
+    m_expiresAtMs = expiresAtMs;
+    m_singleUse = singleUse;
+}
+
+void Peer::setExpectedPeer(const QByteArray& publicKey) {
+    m_expectedPeer = publicKey.size() == 32 ? publicKey : QByteArray();
+}
+
+void Peer::useStoredIdentity() {
+    m_storeIdentity = true;
+    m_haveIdentity = false;
+}
+
+QByteArray Peer::localPublicKey() {
+    ensureIdentity();
+    return QByteArray(reinterpret_cast<const char*>(m_identity.public_key), 32);
+}
+
+QByteArray Peer::peerPublicKey() const {
+    return m_sessionPeer;
+}
+
+void Peer::rememberOffer(qint64* expiry, bool* singleUse, QByteArray* expected) {
+    *expiry = m_expiresAtMs;
+    *singleUse = m_singleUse;
+    *expected = m_expectedPeer;
+}
+
+void Peer::restoreOffer(qint64 expiry, bool singleUse, const QByteArray& expected) {
+    m_expiresAtMs = expiry;
+    m_singleUse = singleUse;
+    m_expectedPeer = expected;
+    m_offerUsed = false;
+}
+
+void Peer::ensureIdentity() {
+    if (m_haveIdentity)
+        return;
+    QByteArray secret = m_storeIdentity ? SecureStore::load("x25519-static") : QByteArray();
+    if (secret.size() != 32) {
+        secret = QByteArray(32, Qt::Uninitialized);
+        randomBytes(reinterpret_cast<uint8_t*>(secret.data()), 32);
+        if (m_storeIdentity)
+            SecureStore::save("x25519-static", secret);
+    }
+    fr_identity_from_secret(&m_identity, reinterpret_cast<const uint8_t*>(secret.constData()));
+    secret.fill(0);
+    m_haveIdentity = true;
+}
+
+bool Peer::takeCredential(const QString& token, bool listening) {
+    uint8_t psk[32];
+    fr_qr_info info{};
+    int error = FR_SEC_FORMAT;
+    const int kind = fr_credential_from_text(token.toUtf8().constData(), psk, &info, &error);
+    if (!kind) {
+        emit status(QString::fromUtf8(fr_security_error_text(error)));
         return false;
     }
-    m_token = token;
+    m_psk = QByteArray(reinterpret_cast<const char*>(psk), 32);
+    memset(psk, 0, sizeof psk);
+    if (kind == 2) {
+        ensureIdentity();
+        if (listening) {
+            if (!fr_public_equal(info.public_key, m_identity.public_key)) {
+                emit status(tr("QR code does not match this device"));
+                return false;
+            }
+        } else {
+            m_expectedPeer = QByteArray(reinterpret_cast<const char*>(info.public_key), 32);
+            m_expiresAtMs = info.expiry_unix * 1000;
+            m_singleUse = true;
+        }
+    }
+    return true;
+}
+
+bool Peer::listen(quint16 port, const QString& token, const QString& bindAddress) {
+    qint64 expiry = 0;
+    bool singleUse = false;
+    QByteArray expected;
+    rememberOffer(&expiry, &singleUse, &expected);
+    close();
+    restoreOffer(expiry, singleUse, expected);
+    if (!takeCredential(token, true))
+        return false;
     QHostAddress address(QHostAddress::AnyIPv4);
     if (!bindAddress.trimmed().isEmpty() &&
         (!address.setAddress(bindAddress.trimmed()) || address.protocol() != QAbstractSocket::IPv4Protocol)) {
         emit status("Invalid listening IP address");
         return false;
     }
+    m_server.setMaxPendingConnections(2);
     if (!m_server.listen(address, port)) {
         emit status(m_server.errorString());
         return false;
@@ -66,12 +196,16 @@ bool Peer::listen(quint16 port, const QString& token, const QString& bindAddress
 }
 
 void Peer::connectTo(const QString& host, quint16 port, const QString& token, const QString& localAddress) {
+    qint64 expiry = 0;
+    bool singleUse = false;
+    QByteArray expected;
+    rememberOffer(&expiry, &singleUse, &expected);
     close();
-    if (token.size() < 6) {
-        emit status(tr("Enter the tablet pairing code (at least 6 characters)"));
+    restoreOffer(expiry, singleUse, expected);
+    if (!takeCredential(token, false)) {
+        emit disconnected();
         return;
     }
-    m_token = token;
     auto* s = new QTcpSocket(this);
     s->setProxy(QNetworkProxy::NoProxy);
     if (!localAddress.isEmpty()) {
@@ -107,46 +241,71 @@ void Peer::close(bool graceful) {
         m_socket = nullptr;
         s->disconnect(this);
         if (drain && s->state() == QAbstractSocket::ConnectedState && m_pendingPings > 0) {
+            RecordKeys recv, sendKeys;
+            memcpy(recv.key, m_recvKey, 32);
+            memcpy(recv.salt, m_recvSalt, 16);
+            recv.counter = m_recvCounter;
+            memcpy(sendKeys.key, m_sendKey, 32);
+            memcpy(sendKeys.salt, m_sendSalt, 16);
+            sendKeys.counter = m_sendCounter;
             connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
             connect(s, &QTcpSocket::errorOccurred, s, [s](QAbstractSocket::SocketError) {
                 s->abort();
                 s->deleteLater();
             });
-            connect(s, &QTcpSocket::readyRead, s, [s, pending = m_rx, pongs = m_pendingPings]() mutable {
-                while (s->bytesAvailable()) {
-                    const auto budget = qint64(FR_MAX_PAYLOAD + FR_HEADER_SIZE) - pending.size();
-                    if (budget <= 0) {
-                        s->abort();
-                        s->deleteLater();
-                        return;
-                    }
-                    pending += s->read(qMin(budget, s->bytesAvailable()));
-                    while (pending.size() >= FR_HEADER_SIZE) {
-                        fr_header h{};
-                        if (!fr_decode_header(reinterpret_cast<const uint8_t*>(pending.constData()), &h)) {
+            connect(s, &QTcpSocket::readyRead, s,
+                    [s, cipher = m_stream, pending = m_rx, recv, sendKeys, pongs = m_pendingPings]() mutable {
+                        cipher += s->readAll();
+                        if (cipher.size() > int(FR_MAX_PAYLOAD + FR_HEADER_SIZE + 64)) {
                             s->abort();
                             s->deleteLater();
                             return;
                         }
-                        if (pending.size() < FR_HEADER_SIZE + h.length)
-                            break;
-                        pending.remove(0, FR_HEADER_SIZE + h.length);
-                        if (h.type == FR_PING && h.length == 0) {
-                            uint8_t reply[FR_HEADER_SIZE];
-                            fr_encode_header(reply, FR_PONG, 0);
-                            s->write(reinterpret_cast<const char*>(reply), sizeof reply);
-                            s->flush();
-                        }
-                        if (h.type == FR_PONG && h.length == 0 && --pongs == 0) {
-                            s->readAll();
-                            s->disconnectFromHost();
-                            if (s->state() == QAbstractSocket::UnconnectedState)
+                        while (true) {
+                            QByteArray frame;
+                            const int rc = takeRecord(cipher, recv, frame);
+                            if (rc == 0)
+                                break;
+                            if (rc < 0) {
+                                s->abort();
                                 s->deleteLater();
-                            return;
+                                return;
+                            }
+                            pending += frame;
+                            while (pending.size() >= FR_HEADER_SIZE) {
+                                fr_header h{};
+                                if (!fr_decode_header(reinterpret_cast<const uint8_t*>(pending.constData()), &h)) {
+                                    s->abort();
+                                    s->deleteLater();
+                                    return;
+                                }
+                                if (pending.size() < FR_HEADER_SIZE + h.length)
+                                    break;
+                                pending.remove(0, FR_HEADER_SIZE + h.length);
+                                if (h.type == FR_PING && h.length == 0) {
+                                    uint8_t reply[FR_HEADER_SIZE];
+                                    fr_encode_header(reply, FR_PONG, 0);
+                                    QByteArray body(reinterpret_cast<char*>(reply), FR_HEADER_SIZE);
+                                    QByteArray record(body.size() + 20, Qt::Uninitialized);
+                                    size_t n = 0;
+                                    if (fr_record_seal(sendKeys.key, sendKeys.salt, &sendKeys.counter,
+                                                       reinterpret_cast<const uint8_t*>(body.constData()),
+                                                       size_t(body.size()), reinterpret_cast<uint8_t*>(record.data()),
+                                                       size_t(record.size()), &n) == 1) {
+                                        s->write(record.constData(), qsizetype(n));
+                                        s->flush();
+                                    }
+                                }
+                                if (h.type == FR_PONG && h.length == 0 && --pongs == 0) {
+                                    s->readAll();
+                                    s->disconnectFromHost();
+                                    if (s->state() == QAbstractSocket::UnconnectedState)
+                                        s->deleteLater();
+                                    return;
+                                }
+                            }
                         }
-                    }
-                }
-            });
+                    });
             QTimer::singleShot(5000, s, [s] {
                 s->abort();
                 s->deleteLater();
@@ -159,7 +318,12 @@ void Peer::close(bool graceful) {
         emit disconnected();
     }
     m_rx.clear();
-    m_challenge.clear();
+    m_stream.clear();
+    m_secure = false;
+    m_phase = HsIdle;
+    m_sendCounter = m_recvCounter = 0;
+    m_sessionPeer.clear();
+    fr_hs_wipe(&m_hs);
     m_backlog.invalidate();
     m_waitVideoKey = false;
     m_pendingPings = 0;
@@ -174,13 +338,23 @@ void Peer::attach(QTcpSocket* s, bool server) {
     m_screenScaleToggleSupported = false;
     m_pendingPings = 0;
     m_rx.clear();
+    m_stream.clear();
+    m_secure = false;
+    m_phase = server ? HsWaitHello : HsIdle;
+    m_sendCounter = m_recvCounter = 0;
     m_session.start();
     m_lastRx.start();
     s->setProxy(QNetworkProxy::NoProxy);
     s->setReadBufferSize(FR_MAX_PAYLOAD + FR_HEADER_SIZE);
     if (s->state() == QAbstractSocket::ConnectedState)
         s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
-    connect(s, &QTcpSocket::connected, s, [s] { s->setSocketOption(QAbstractSocket::LowDelayOption, 1); });
+    connect(s, &QTcpSocket::connected, this, [this, s] {
+        if (m_socket != s)
+            return;
+        s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+        if (!m_serverSide)
+            beginClient();
+    });
     connect(s, &QTcpSocket::bytesWritten, this, [this] {
         if (m_socket && m_socket->bytesToWrite() == 0)
             m_backlog.invalidate();
@@ -203,7 +377,9 @@ void Peer::attach(QTcpSocket* s, bool server) {
         m_screenScaleToggleSupported = false;
         m_tick.stop();
         m_rx.clear();
-        m_challenge.clear();
+        m_stream.clear();
+        m_secure = false;
+        m_phase = HsIdle;
         s->disconnect(this);
         s->abort();
         s->deleteLater();
@@ -221,36 +397,52 @@ void Peer::attach(QTcpSocket* s, bool server) {
             m_screenScaleToggleSupported = false;
             m_tick.stop();
             m_rx.clear();
+            m_stream.clear();
+            m_secure = false;
+            m_phase = HsIdle;
             emit disconnected();
             emit status(tr("Disconnected"));
         }
         s->deleteLater();
     });
-    if (server) {
-        m_challenge.resize(32);
-        for (int i = 0; i < 32; i += 4) {
-            quint32 r = QRandomGenerator::system()->generate();
-            fr_put_u32(reinterpret_cast<uint8_t*>(m_challenge.data() + i), r);
-        }
-        send(FR_CHALLENGE, m_challenge);
-    }
+    if (!server && s->state() == QAbstractSocket::ConnectedState)
+        beginClient();
     m_tick.start();
 }
 
 void Peer::fail(const QString& reason) {
+    if (!m_ready)
+        fr_attempt_fail(&m_gate, QDateTime::currentMSecsSinceEpoch());
     emit status(reason);
     if (m_socket)
         m_socket->abort();
 }
 
 void Peer::read() {
-    while (m_socket && m_socket->bytesAvailable()) {
-        const auto budget = qint64(FR_MAX_PAYLOAD + FR_HEADER_SIZE) - m_rx.size();
-        if (budget <= 0) {
-            fail(tr("Receive buffer exceeded"));
+    if (!m_socket)
+        return;
+    m_stream += m_socket->readAll();
+    if (m_stream.size() > int(2 * (FR_MAX_PAYLOAD + FR_HEADER_SIZE + 32))) {
+        fail(tr("Receive buffer exceeded"));
+        return;
+    }
+    if (m_phase != HsOpen && !pumpHandshake())
+        return;
+    while (m_socket && m_phase == HsOpen) {
+        QByteArray frame;
+        RecordKeys recv;
+        memcpy(recv.key, m_recvKey, 32);
+        memcpy(recv.salt, m_recvSalt, 16);
+        recv.counter = m_recvCounter;
+        const int rc = takeRecord(m_stream, recv, frame);
+        if (rc == 0)
+            break;
+        if (rc < 0) {
+            fail(tr("Encrypted record rejected"));
             return;
         }
-        m_rx += m_socket->read(qMin(budget, m_socket->bytesAvailable()));
+        m_recvCounter = recv.counter;
+        m_rx += frame;
         while (m_rx.size() >= FR_HEADER_SIZE) {
             fr_header h{};
             if (!fr_decode_header(reinterpret_cast<const uint8_t*>(m_rx.constData()), &h)) {
@@ -271,31 +463,7 @@ void Peer::read() {
 
 void Peer::handle(quint8 t, const QByteArray& p) {
     if (!m_ready) {
-        if (!m_serverSide && t == FR_CHALLENGE && p.size() == 32 && m_challenge.isEmpty()) {
-            m_challenge = p;
-            send(FR_AUTH, QMessageAuthenticationCode::hash(p, m_token.toUtf8(), QCryptographicHash::Sha256));
-            return;
-        }
-        if (m_serverSide && t == FR_AUTH && p.size() == 32) {
-            const auto expected =
-                QMessageAuthenticationCode::hash(m_challenge, m_token.toUtf8(), QCryptographicHash::Sha256);
-            unsigned diff = 0;
-            for (int i = 0; i < 32; ++i)
-                diff |= unsigned(uint8_t(p[i]) ^ uint8_t(expected[i]));
-            if (diff) {
-                fail(tr("Pairing code rejected"));
-                return;
-            }
-            m_ready = true;
-            startCursor();
-            send(FR_READY);
-            send(FR_STATUS, QByteArray("Furina capability: screen-scale-v2"));
-            send(FR_STATUS, QByteArray("Furina capability: screen-scale-v1"));
-            emit connected();
-            emit status(tr("Paired"));
-            return;
-        }
-        if (!m_serverSide && t == FR_READY && p.isEmpty() && m_challenge.size() == 32) {
+        if (!m_serverSide && m_secure && t == FR_READY && p.isEmpty()) {
             m_ready = true;
             startCursor();
             send(FR_STATUS, QByteArray("Furina capability: screen-scale-v2"));
@@ -490,7 +658,7 @@ void Peer::handle(quint8 t, const QByteArray& p) {
 }
 
 void Peer::send(quint8 t, const QByteArray& p) {
-    if (!m_socket || m_socket->state() != QAbstractSocket::ConnectedState)
+    if (!m_socket || !m_secure || m_socket->state() != QAbstractSocket::ConnectedState)
         return;
     uint8_t h[FR_HEADER_SIZE];
     if (!fr_encode_header(h, t, p.size()))
@@ -500,10 +668,20 @@ void Peer::send(quint8 t, const QByteArray& p) {
             fail(tr("Peer too slow"));
         return;
     }
+    QByteArray frame;
+    frame.append(reinterpret_cast<const char*>(h), FR_HEADER_SIZE);
+    frame.append(p);
+    QByteArray record(frame.size() + 20, Qt::Uninitialized);
+    size_t n = 0;
+    if (fr_record_seal(m_sendKey, m_sendSalt, &m_sendCounter, reinterpret_cast<const uint8_t*>(frame.constData()),
+                       size_t(frame.size()), reinterpret_cast<uint8_t*>(record.data()), size_t(record.size()),
+                       &n) != 1) {
+        fail(tr("Encrypted record rejected"));
+        return;
+    }
     if (t == FR_PING)
         ++m_pendingPings;
-    m_socket->write(reinterpret_cast<const char*>(h), sizeof h);
-    m_socket->write(p);
+    m_socket->write(record.constData(), qsizetype(n));
 }
 
 bool Peer::canSendFrame() const {
@@ -618,10 +796,104 @@ void Peer::sendPointerSpeed(int percent, quint64 revision) {
 }
 
 void Peer::startCursor() {
-    const auto key = QMessageAuthenticationCode::hash(QByteArray("FURINA-CURSOR-1") + m_challenge,
-                                                      m_token.toUtf8(), QCryptographicHash::Sha256);
-    m_cursor.begin(key, m_serverSide, m_socket->peerAddress(), m_socket->peerPort(),
-                   m_socket->localAddress());
+    m_cursor.begin(QByteArray(reinterpret_cast<const char*>(m_cursorKey), 32), m_serverSide,
+                   m_socket->peerAddress(), m_socket->peerPort(), m_socket->localAddress());
+}
+
+void Peer::beginClient() {
+    if (!m_socket || m_serverSide || m_phase != HsIdle)
+        return;
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    if (m_expiresAtMs && now > m_expiresAtMs) {
+        fail(QString::fromUtf8(fr_security_error_text(FR_SEC_EXPIRED)));
+        return;
+    }
+    ensureIdentity();
+    uint8_t eph[32], hello[FR_HS_CLIENT_HELLO];
+    randomBytes(eph, 32);
+    const uint8_t* pin = m_expectedPeer.size() == 32 ? reinterpret_cast<const uint8_t*>(m_expectedPeer.constData())
+                                                     : nullptr;
+    if (m_psk.size() != 32 ||
+        !fr_hs_client_start(&m_hs, &m_identity, eph, reinterpret_cast<const uint8_t*>(m_psk.constData()), 1, pin,
+                            hello)) {
+        fail(QString::fromUtf8(fr_security_error_text(m_hs.error ? m_hs.error : FR_SEC_AUTH)));
+        return;
+    }
+    m_socket->write(reinterpret_cast<const char*>(hello), sizeof hello);
+    m_phase = HsWaitServer;
+}
+
+bool Peer::pumpHandshake() {
+    if (m_stream.size() >= 4 && m_stream.left(4) == "FUR1") {
+        fail(QString::fromUtf8(fr_security_error_text(FR_SEC_LEGACY)));
+        return false;
+    }
+    if (m_phase == HsWaitHello) {
+        if (m_stream.size() < FR_HS_CLIENT_HELLO)
+            return true;
+        ensureIdentity();
+        uint8_t eph[32], reply[FR_HS_SERVER_HELLO];
+        randomBytes(eph, 32);
+        const auto pinBytes = !m_sessionPeer.isEmpty() ? m_sessionPeer : m_expectedPeer;
+        const uint8_t* pin =
+            pinBytes.size() == 32 ? reinterpret_cast<const uint8_t*>(pinBytes.constData()) : nullptr;
+        if (m_psk.size() != 32 ||
+            !fr_hs_server_start(&m_hs, &m_identity, eph, reinterpret_cast<const uint8_t*>(m_psk.constData()), pin,
+                                reinterpret_cast<const uint8_t*>(m_stream.constData()), reply)) {
+            fail(QString::fromUtf8(fr_security_error_text(m_hs.error ? m_hs.error : FR_SEC_AUTH)));
+            return false;
+        }
+        m_socket->write(reinterpret_cast<const char*>(reply), sizeof reply);
+        m_stream.remove(0, FR_HS_CLIENT_HELLO);
+        m_phase = HsWaitConfirm;
+    }
+    if (m_phase == HsWaitServer) {
+        if (m_stream.size() < FR_HS_SERVER_HELLO)
+            return true;
+        uint8_t confirm[FR_HS_CLIENT_CONFIRM];
+        if (!fr_hs_client_finish(&m_hs, reinterpret_cast<const uint8_t*>(m_stream.constData()), confirm)) {
+            fail(QString::fromUtf8(fr_security_error_text(m_hs.error ? m_hs.error : FR_SEC_AUTH)));
+            return false;
+        }
+        m_socket->write(reinterpret_cast<const char*>(confirm), sizeof confirm);
+        m_stream.remove(0, FR_HS_SERVER_HELLO);
+        acceptSecure(false);
+    }
+    if (m_phase == HsWaitConfirm) {
+        if (m_stream.size() < FR_HS_CLIENT_CONFIRM)
+            return true;
+        if (!fr_hs_server_finish(&m_hs, reinterpret_cast<const uint8_t*>(m_stream.constData()))) {
+            fail(QString::fromUtf8(fr_security_error_text(m_hs.error ? m_hs.error : FR_SEC_AUTH)));
+            return false;
+        }
+        m_stream.remove(0, FR_HS_CLIENT_CONFIRM);
+        acceptSecure(true);
+    }
+    return true;
+}
+
+void Peer::acceptSecure(bool serverReady) {
+    memcpy(m_sendKey, m_hs.send_key, 32);
+    memcpy(m_recvKey, m_hs.recv_key, 32);
+    memcpy(m_cursorKey, m_hs.cursor_key, 32);
+    memcpy(m_sendSalt, m_hs.send_salt, 16);
+    memcpy(m_recvSalt, m_hs.recv_salt, 16);
+    m_sendCounter = m_recvCounter = 0;
+    m_secure = true;
+    m_phase = HsOpen;
+    m_sessionPeer = QByteArray(reinterpret_cast<const char*>(m_hs.peer_static), 32);
+    if (m_singleUse)
+        m_offerUsed = true;
+    fr_attempt_success(&m_gate);
+    if (!serverReady)
+        return;
+    m_ready = true;
+    startCursor();
+    send(FR_READY);
+    send(FR_STATUS, QByteArray("Furina capability: screen-scale-v2"));
+    send(FR_STATUS, QByteArray("Furina capability: screen-scale-v1"));
+    emit connected();
+    emit status(tr("Paired"));
 }
 
 void Peer::sendCursorPreference(bool enabled, quint64 revision) {

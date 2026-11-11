@@ -4,6 +4,10 @@
 - NVIDIA NVENC API 12.1 header: https://github.com/FFmpeg/nv-codec-headers/tree/n12.1.14.0 . The header's MIT notice is preserved; the NVIDIA driver binary is loaded from Windows System32 and is not bundled.
 - Qt and MinGW runtime deployment uses the existing Qt installation and windeployqt.
 
+- Monocypher 4.0.2 (X25519, BLAKE2b, XChaCha20-Poly1305): https://github.com/LoupVaillant/Monocypher/tree/4.0.2 . Dual-licensed BSD-2-Clause or CC0-1.0; see third_party/monocypher/LICENCE.md. Used for the pairing handshake and record layer.
+- Nayuki QR Code generator (C): https://github.com/nayuki/QR-Code-generator . MIT license in third_party/qrcodegen/qrcodegen.c and qr-readme.md. Used to draw pairing QR codes.
+- quirc 1.2 QR decoder: https://github.com/dlbeer/quirc . ISC license in third_party/quirc/quirc.LICENSE. Used when the tablet scans a pairing QR code.
+
 - VirtualDrivers Virtual-Display-Driver 25.7.23 official AMD64 driver package: https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23 . MIT license retained at Fukaros/core/display/virtual-display/driver/LICENSE.txt. Signed files are distributed unmodified and installation validates fixed SHA-256 hashes and Authenticode.
 
 - Qt 6.11.1 is dynamically linked. LGPL v3 / GPL v3 license texts accompany the Windows runtime; upstream source: https://download.qt.io/archive/qt/6.11/6.11.1/single/ . Qt module and bundled third-party notices: https://doc.qt.io/qt-6/licenses-used-in-qt.html . Applications do not modify Qt libraries.

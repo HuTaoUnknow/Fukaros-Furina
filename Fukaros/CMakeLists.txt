@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Fukaros VERSION 0.4.20 LANGUAGES C CXX)
+project(Fukaros VERSION 0.4.21 LANGUAGES C CXX)
 include(../cmake/ProjectDefaults.cmake)
 
 set(CMAKE_AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ui/forms")
@@ -24,7 +24,7 @@ add_library(fukaros_platform STATIC
 target_include_directories(fukaros_platform PUBLIC core/app core/display core/input core/transport)
 target_link_libraries(fukaros_platform PUBLIC fukaros_display_native furina_session furina_settings)
 if(WIN32)
-    target_link_libraries(fukaros_platform PUBLIC shell32 iphlpapi ws2_32)
+    target_link_libraries(fukaros_platform PUBLIC shell32 iphlpapi ws2_32 advapi32)
 endif()
 
 add_library(fukaros_app STATIC

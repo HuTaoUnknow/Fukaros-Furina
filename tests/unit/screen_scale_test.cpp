@@ -48,8 +48,8 @@ class ScaleTest : public QObject {
         QCOMPARE(desktop.percent(), 150);
         QCOMPARE(a.currentData().toInt(), 150);
         b.setCurrentIndex(b.findData(200));
-        QVERIFY(server.listen(29937, "scale-test", "127.0.0.1"));
-        client.connectTo("127.0.0.1", 29937, "scale-test");
+        QVERIFY(server.listen(29937, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        client.connectTo("127.0.0.1", 29937, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(client.ready());
         QTRY_COMPARE(desktop.percent(), 200);
         a.setCurrentIndex(a.findData(175));
@@ -79,56 +79,25 @@ class ScaleTest : public QObject {
         QCOMPARE(persisted.percent(), 150);
     }
 
-    void legacyPeerDoesNotReceiveUnknownPacket() {
+    void legacyPeerIsRejected() {
         QTcpServer legacy;
         QVERIFY(legacy.listen(QHostAddress::LocalHost, 0));
         Peer client;
-        client.connectTo("127.0.0.1", legacy.serverPort(), "legacy-code");
+        QSignalSpy status(&client, &Peer::status);
+        client.connectTo("127.0.0.1", legacy.serverPort(), "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(legacy.hasPendingConnections());
         auto* socket = legacy.nextPendingConnection();
-        auto send = [socket](int type, const QByteArray& payload) {
-            uint8_t header[FR_HEADER_SIZE];
-            QVERIFY(fr_encode_header(header, type, payload.size()));
-            socket->write(reinterpret_cast<char*>(header), sizeof(header));
-            socket->write(payload);
-        };
-        send(FR_CHALLENGE, QByteArray(32, 'x'));
-        QTRY_VERIFY(socket->bytesAvailable() >= 44);
-        const auto auth = socket->readAll();
-        QCOMPARE(auth.mid(12, 32),
-                 QMessageAuthenticationCode::hash(QByteArray(32, 'x'), QByteArray("legacy-code"),
-                                                  QCryptographicHash::Sha256));
-        send(FR_READY, {});
-        QTRY_VERIFY(client.ready());
-        client.sendScreenScale(200, 123);
-        client.sendStatus("normal-status");
-        QTRY_VERIFY(socket->bytesAvailable() > 0);
-        QTest::qWait(40);
-        QByteArray wire = socket->readAll();
-        bool normal = false;
-        while (wire.size() >= FR_HEADER_SIZE) {
-            fr_header h{};
-            QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(wire.constData()), &h));
-            QVERIFY(wire.size() >= int(FR_HEADER_SIZE + h.length));
-            QVERIFY(h.type <= FR_CURSOR_PREFERENCE);
-            if (wire.mid(FR_HEADER_SIZE, h.length) == "normal-status")
-                normal = true;
-            wire.remove(0, FR_HEADER_SIZE + h.length);
-        }
-        QVERIFY(normal);
-        QVERIFY(client.ready());
-        // A v1 peer accepts message 17, but only its original 12-byte form.
-        QSignalSpy capability(&client, &Peer::screenScaleAvailable);
-        send(FR_STATUS, QByteArray("Furina capability: screen-scale-v1"));
-        QTRY_COMPARE(capability.size(), 1);
-        client.sendScreenScale(200, 123, false);
-        QTRY_VERIFY(socket->bytesAvailable() >= FR_HEADER_SIZE + 12);
-        const auto legacyScale = socket->read(FR_HEADER_SIZE + 12);
-        fr_header scaleHeader{};
-        QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(legacyScale.constData()), &scaleHeader));
-        QCOMPARE(scaleHeader.type, quint8(FR_SCREEN_SCALE));
-        QCOMPARE(scaleHeader.length, quint32(12));
-        QCOMPARE(fr_get_u32(reinterpret_cast<const uint8_t*>(legacyScale.constData() + FR_HEADER_SIZE)), quint32(100));
+        uint8_t header[FR_HEADER_SIZE];
+        QVERIFY(fr_encode_header(header, FR_CHALLENGE, 32));
+        socket->write(reinterpret_cast<char*>(header), sizeof header);
+        socket->write(QByteArray(32, 'x'));
+        QTRY_VERIFY(!client.ready());
+        QTRY_VERIFY_WITH_TIMEOUT(socket->state() == QAbstractSocket::UnconnectedState, 3000);
+        bool reported = false;
+        for (const auto& row : status)
+            if (row[0].toString().contains("0.4.21"))
+                reported = true;
+        QVERIFY(reported);
     }
 
     void toggleSynchronizesAndRestoresSavedScale() {
@@ -145,8 +114,8 @@ class ScaleTest : public QObject {
         Peer server, client;
         ScreenScaleSettings desktop(&client, &pc, true), mobile(&server, &phone, false);
         QVERIFY(at.isChecked());
-        QVERIFY(server.listen(29937, "scale-toggle", "127.0.0.1"));
-        client.connectTo("127.0.0.1", 29937, "scale-toggle");
+        QVERIFY(server.listen(29937, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        client.connectTo("127.0.0.1", 29937, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(client.ready());
         a.setCurrentIndex(a.findData(200));
         QTRY_COMPARE(mobile.percent(), 200);

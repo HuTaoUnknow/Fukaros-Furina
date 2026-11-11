@@ -7,6 +7,8 @@
 QByteArray furinaDiscoveryRequest(const QByteArray& nonce);
 QByteArray furinaDiscoveryReply(const QByteArray& request);
 bool furinaDiscoveryMatches(const QByteArray& reply, const QByteArray& nonce);
+QString furinaLanAddress(bool preferUsb);
+QString furinaUsbAddress();
 
 class NetworkDiscoveryServer : public QObject {
     Q_OBJECT

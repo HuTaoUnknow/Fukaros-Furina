@@ -1,10 +1,110 @@
 #include <QtTest>
 #include <QTcpSocket>
-#include <QMessageAuthenticationCode>
 #include <QNetworkProxy>
 #include <QNetworkInterface>
+#include <QDateTime>
 #include "peer.h"
 #include "video_policy.h"
+#include "furina_security.h"
+
+namespace {
+const char* kPairingCode = "ABCD-EFGH-JKLM-NPQR-ST23";
+
+struct RawSession {
+    fr_handshake hs{};
+    uint64_t sendCount = 0;
+    uint64_t recvCount = 0;
+    QByteArray pending;
+};
+
+bool rawHandshake(QTcpSocket& raw, RawSession& session, bool fragment = false) {
+    uint8_t psk[32], secret[32], eph[32], hello[FR_HS_CLIENT_HELLO], confirm[FR_HS_CLIENT_CONFIRM];
+    fr_qr_info info{};
+    int error = 0;
+    if (fr_credential_from_text(kPairingCode, psk, &info, &error) != 1)
+        return false;
+    for (int i = 0; i < 32; ++i) {
+        secret[i] = uint8_t(50 + i);
+        eph[i] = uint8_t(90 + i * 3);
+    }
+    fr_identity id{};
+    fr_identity_from_secret(&id, secret);
+    if (!fr_hs_client_start(&session.hs, &id, eph, psk, 1, nullptr, hello))
+        return false;
+    const auto writeBytes = [&](const uint8_t* data, int size) {
+        if (!fragment)
+            return raw.write(reinterpret_cast<const char*>(data), size) == size;
+        for (int i = 0; i < size; ++i) {
+            if (raw.write(reinterpret_cast<const char*>(data + i), 1) != 1)
+                return false;
+            raw.flush();
+        }
+        return true;
+    };
+    if (!writeBytes(hello, FR_HS_CLIENT_HELLO))
+        return false;
+    const auto start = QDateTime::currentMSecsSinceEpoch();
+    while (raw.bytesAvailable() < FR_HS_SERVER_HELLO && QDateTime::currentMSecsSinceEpoch() - start < 3000)
+        QTest::qWait(10);
+    if (raw.bytesAvailable() < FR_HS_SERVER_HELLO)
+        return false;
+    const auto reply = raw.read(FR_HS_SERVER_HELLO);
+    if (!fr_hs_client_finish(&session.hs, reinterpret_cast<const uint8_t*>(reply.constData()), confirm))
+        return false;
+    return writeBytes(confirm, FR_HS_CLIENT_CONFIRM);
+}
+
+bool writeFrame(QTcpSocket& raw, RawSession& session, quint8 type, const QByteArray& payload) {
+    uint8_t header[FR_HEADER_SIZE];
+    if (!fr_encode_header(header, type, payload.size()))
+        return false;
+    QByteArray plain;
+    plain.append(reinterpret_cast<const char*>(header), FR_HEADER_SIZE);
+    plain.append(payload);
+    QByteArray record(plain.size() + 20, Qt::Uninitialized);
+    size_t n = 0;
+    if (fr_record_seal(session.hs.send_key, session.hs.send_salt, &session.sendCount,
+                       reinterpret_cast<const uint8_t*>(plain.constData()), size_t(plain.size()),
+                       reinterpret_cast<uint8_t*>(record.data()), size_t(record.size()), &n) != 1)
+        return false;
+    return raw.write(record.constData(), qsizetype(n)) == qsizetype(n);
+}
+
+bool readFrame(QTcpSocket& raw, RawSession& session, quint8* type, QByteArray* payload, int timeoutMs = 4000) {
+    const auto start = QDateTime::currentMSecsSinceEpoch();
+    while (QDateTime::currentMSecsSinceEpoch() - start < timeoutMs) {
+        session.pending += raw.readAll();
+        if (session.pending.size() >= 4) {
+            const auto declared = fr_get_u32(reinterpret_cast<const uint8_t*>(session.pending.constData()));
+            if (declared > FR_MAX_PAYLOAD + FR_HEADER_SIZE)
+                return false;
+            QByteArray plain(int(declared), Qt::Uninitialized);
+            size_t consumed = 0, outn = 0;
+            const int rc =
+                fr_record_open(session.hs.recv_key, session.hs.recv_salt, &session.recvCount,
+                               reinterpret_cast<const uint8_t*>(session.pending.constData()),
+                               size_t(session.pending.size()), &consumed, reinterpret_cast<uint8_t*>(plain.data()),
+                               size_t(plain.size()), &outn);
+            if (rc < 0)
+                return false;
+            if (rc == 1) {
+                session.pending.remove(0, int(consumed));
+                if (outn < FR_HEADER_SIZE)
+                    return false;
+                fr_header header{};
+                if (!fr_decode_header(reinterpret_cast<const uint8_t*>(plain.constData()), &header) ||
+                    outn != FR_HEADER_SIZE + header.length)
+                    return false;
+                *type = header.type;
+                *payload = plain.mid(FR_HEADER_SIZE, int(header.length));
+                return true;
+            }
+        }
+        QTest::qWait(10);
+    }
+    return false;
+}
+} // namespace
 
 class PeerTest : public QObject {
     Q_OBJECT
@@ -12,8 +112,8 @@ class PeerTest : public QObject {
 
     void directTransportDisablesNagleAfterConnect() {
         Peer server, client;
-        QVERIFY(server.listen(29893, "latency-check", "127.0.0.1"));
-        client.connectTo("127.0.0.1", 29893, "latency-check");
+        QVERIFY(server.listen(29893, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        client.connectTo("127.0.0.1", 29893, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(server.ready() && client.ready());
         auto* socket = client.findChild<QTcpSocket*>("furinaMain");
         QVERIFY(socket);
@@ -23,8 +123,8 @@ class PeerTest : public QObject {
     void cursorConnectionIsIndependentOfVideo() {
         Peer server, client;
         QSignalSpy cursors(&client, &Peer::cursor), videos(&client, &Peer::video);
-        QVERIFY(server.listen(29894, "cursor-channel", "127.0.0.1"));
-        client.connectTo("127.0.0.1", 29894, "cursor-channel");
+        QVERIFY(server.listen(29894, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        client.connectTo("127.0.0.1", 29894, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(server.cursorReady() && client.cursorReady());
         auto* main = client.findChild<QTcpSocket*>("furinaMain");
         QVERIFY(main);
@@ -102,8 +202,8 @@ class PeerTest : public QObject {
     void gracefulStopDrainsCancellation() {
         QFETCH(bool, serverStops);
         Peer server, client;
-        QVERIFY(server.listen(29880, "stop-sync-code"));
-        client.connectTo("127.0.0.1", 29880, "stop-sync-code");
+        QVERIFY(server.listen(29880, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29880, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(server.ready() && client.ready());
         auto *sender = serverStops ? &server : &client, *receiver = serverStops ? &client : &server;
         QSignalSpy video(receiver, &Peer::video), approval(receiver, &Peer::approval),
@@ -129,8 +229,8 @@ class PeerTest : public QObject {
 
     void simultaneousStopsFinishBothTransports() {
         Peer server, client;
-        QVERIFY(server.listen(29881, "stop-sync-code"));
-        client.connectTo("127.0.0.1", 29881, "stop-sync-code");
+        QVERIFY(server.listen(29881, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29881, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(server.ready() && client.ready());
         server.sendApproval(3102, FR_APPROVAL_CANCEL, FR_APPROVAL_SHARE);
         client.sendApproval(3102, FR_APPROVAL_CANCEL, FR_APPROVAL_SHARE);
@@ -143,47 +243,37 @@ class PeerTest : public QObject {
     void anOldHeartbeatPongDoesNotFinishStop() {
         Peer server;
         QTcpSocket raw;
-        QVERIFY(server.listen(29882, "stop-sync-code"));
+        QVERIFY(server.listen(29882, kPairingCode));
         raw.connectToHost("127.0.0.1", 29882);
-        QTRY_VERIFY(raw.bytesAvailable() >= 44);
-        const auto challenge = raw.read(44).mid(FR_HEADER_SIZE);
-        const auto mac =
-            QMessageAuthenticationCode::hash(challenge, "stop-sync-code", QCryptographicHash::Sha256);
-        uint8_t header[FR_HEADER_SIZE];
-        fr_encode_header(header, FR_AUTH, mac.size());
-        raw.write(reinterpret_cast<char*>(header), sizeof header);
-        raw.write(mac);
+        QTRY_COMPARE(raw.state(), QAbstractSocket::ConnectedState);
+        RawSession session;
+        QVERIFY(rawHandshake(raw, session));
         QTRY_VERIFY(server.ready());
-        QTRY_VERIFY(raw.bytesAvailable() >= FR_HEADER_SIZE);
-        raw.read(FR_HEADER_SIZE);
-        // New features advertise over the legacy-compatible status packet.
-        for (const auto version : {"v2", "v1"}) {
-            QTRY_VERIFY(raw.bytesAvailable() >= FR_HEADER_SIZE);
-            fr_header capabilities{};
-            const auto capabilityHeader = raw.read(FR_HEADER_SIZE);
-            QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(capabilityHeader.constData()), &capabilities));
-            QCOMPARE(capabilities.type, quint8(FR_STATUS));
-            QTRY_VERIFY(raw.bytesAvailable() >= capabilities.length);
-            QCOMPARE(raw.read(capabilities.length), QByteArray("Furina capability: screen-scale-") + version);
+        bool sawScale = false;
+        quint8 type = 0;
+        QByteArray payload;
+        while (type != FR_PING) {
+            QVERIFY(readFrame(raw, session, &type, &payload, 5000));
+            if (type == FR_STATUS && payload.contains("screen-scale"))
+                sawScale = true;
         }
-        QTRY_VERIFY_WITH_TIMEOUT(raw.bytesAvailable() >= FR_HEADER_SIZE, 4000);
-        fr_header ping{};
-        const auto earlier = raw.read(FR_HEADER_SIZE);
-        QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(earlier.constData()), &ping));
-        QCOMPARE(ping.type, quint8(FR_PING));
+        QVERIFY(sawScale);
         server.sendApproval(3103, FR_APPROVAL_CANCEL, FR_APPROVAL_SHARE);
         server.close(true);
-        QTRY_VERIFY(raw.bytesAvailable() >= 36);
-        const auto stop = raw.read(36);
-        fr_header barrier{};
-        QVERIFY(fr_decode_header(reinterpret_cast<const uint8_t*>(stop.constData() + 24), &barrier));
-        QCOMPARE(barrier.type, quint8(FR_PING));
-        fr_encode_header(header, FR_PONG, 0);
-        raw.write(reinterpret_cast<char*>(header), sizeof header);
+        bool sawCancel = false, sawBarrier = false;
+        while (!sawBarrier) {
+            QVERIFY(readFrame(raw, session, &type, &payload));
+            if (type == FR_APPROVAL)
+                sawCancel = true;
+            if (type == FR_PING)
+                sawBarrier = true;
+        }
+        QVERIFY(sawCancel);
+        QVERIFY(writeFrame(raw, session, FR_PONG, {}));
         raw.flush();
         QTest::qWait(40);
         QCOMPARE(raw.state(), QAbstractSocket::ConnectedState);
-        raw.write(reinterpret_cast<char*>(header), sizeof header);
+        QVERIFY(writeFrame(raw, session, FR_PONG, {}));
         raw.flush();
         QTRY_COMPARE(raw.state(), QAbstractSocket::UnconnectedState);
     }
@@ -192,8 +282,8 @@ class PeerTest : public QObject {
         Peer server, client;
         QSignalSpy paired(&client, &Peer::connected), video(&server, &Peer::video),
             profile(&server, &Peer::profile), feedback(&client, &Peer::feedback);
-        QVERIFY(server.listen(29879, "video-code"));
-        client.connectTo("127.0.0.1", 29879, "video-code");
+        QVERIFY(server.listen(29879, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29879, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(paired.count(), 1);
         client.sendProfile(0);
         QTRY_COMPARE(profile.count(), 1);
@@ -219,8 +309,8 @@ class PeerTest : public QObject {
         Peer server, client;
         QSignalSpy paired(&client, &Peer::connected), received(&server, &Peer::session),
             reverse(&client, &Peer::session);
-        QVERIFY(server.listen(29876, "session-code"));
-        client.connectTo("127.0.0.1", 29876, "session-code");
+        QVERIFY(server.listen(29876, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29876, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(paired.count(), 1);
         client.sendSession(FR_MAXIMIZE);
         QTRY_COMPARE(received.count(), 1);
@@ -236,7 +326,7 @@ class PeerTest : public QObject {
     void unauthenticatedSessionIsRejected() {
         Peer server;
         QSignalSpy requests(&server, &Peer::session);
-        QVERIFY(server.listen(29877, "session-code"));
+        QVERIFY(server.listen(29877, "ABCD-EFGH-JKLM-NPQR-ST23"));
         QTcpSocket raw;
         raw.connectToHost("127.0.0.1", 29877);
         QTRY_COMPARE(raw.state(), QAbstractSocket::ConnectedState);
@@ -252,21 +342,14 @@ class PeerTest : public QObject {
     void invalidSessionPayloadIsRejected() {
         Peer server;
         QSignalSpy requests(&server, &Peer::session);
-        QVERIFY(server.listen(29878, "session-code"));
+        QVERIFY(server.listen(29878, kPairingCode));
         QTcpSocket raw;
         raw.connectToHost("127.0.0.1", 29878);
-        QTRY_VERIFY(raw.bytesAvailable() >= 44);
-        const auto challenge = raw.read(44).mid(12);
-        const auto mac =
-            QMessageAuthenticationCode::hash(challenge, "session-code", QCryptographicHash::Sha256);
-        uint8_t h[12];
-        fr_encode_header(h, FR_AUTH, 32);
-        raw.write(reinterpret_cast<char*>(h), 12);
-        raw.write(mac);
+        QTRY_COMPARE(raw.state(), QAbstractSocket::ConnectedState);
+        RawSession session;
+        QVERIFY(rawHandshake(raw, session));
         QTRY_VERIFY(server.ready());
-        fr_encode_header(h, FR_SESSION, 2);
-        raw.write(reinterpret_cast<char*>(h), 12);
-        raw.write("xx", 2);
+        QVERIFY(writeFrame(raw, session, FR_SESSION, QByteArray("xx", 2)));
         QTRY_COMPARE(raw.state(), QAbstractSocket::UnconnectedState);
         QCOMPARE(requests.count(), 0);
     }
@@ -304,8 +387,8 @@ class PeerTest : public QObject {
         QVERIFY2(!address.isEmpty(), "Requires a local non-loopback IPv4 address");
         Peer server, client;
         QSignalSpy paired(&client, &Peer::connected), frames(&server, &Peer::frame);
-        QVERIFY(server.listen(29875, "proxy-test-code"));
-        client.connectTo(address, 29875, "proxy-test-code");
+        QVERIFY(server.listen(29875, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo(address, 29875, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(paired.count(), 1);
         QImage im(40, 30, QImage::Format_RGB32);
         im.fill(Qt::blue);
@@ -321,7 +404,7 @@ class PeerTest : public QObject {
         port.close();
         Peer client;
         QSignalSpy statuses(&client, &Peer::status), closed(&client, &Peer::disconnected);
-        client.connectTo("127.0.0.1", unused, "test-code");
+        client.connectTo("127.0.0.1", unused, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(statuses.count() > 0);
         QTRY_COMPARE(closed.count(), 1);
         const auto count = statuses.count();
@@ -333,8 +416,8 @@ class PeerTest : public QObject {
         Peer server, client;
         QSignalSpy connected(&client, &Peer::connected), frames(&server, &Peer::frame),
             keys(&server, &Peer::key), reverse(&client, &Peer::frame);
-        QVERIFY(server.listen(29871, "12345678"));
-        client.connectTo("127.0.0.1", 29871, "12345678");
+        QVERIFY(server.listen(29871, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29871, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(connected.count(), 1);
         QVERIFY(server.ready());
         QImage im(80, 60, QImage::Format_RGB32);
@@ -354,8 +437,8 @@ class PeerTest : public QObject {
     void wrongToken() {
         Peer s, c;
         QSignalSpy spy(&c, &Peer::connected);
-        QVERIFY(s.listen(29872, "correct-code"));
-        c.connectTo("127.0.0.1", 29872, "wrong-code");
+        QVERIFY(s.listen(29872, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        c.connectTo("127.0.0.1", 29872, "WXYZ-6789-ABCD-EFGH-JKL2");
         QTest::qWait(350);
         QCOMPARE(spy.count(), 0);
         QVERIFY(!s.ready());
@@ -363,40 +446,28 @@ class PeerTest : public QObject {
 
     void fragmentedAndCoalesced() {
         Peer s;
-        QVERIFY(s.listen(29873, "test-code"));
+        QVERIFY(s.listen(29873, kPairingCode));
         QTcpSocket raw;
         raw.connectToHost("127.0.0.1", 29873);
         QTRY_VERIFY(raw.state() == QAbstractSocket::ConnectedState);
-        QTRY_VERIFY(raw.bytesAvailable() >= 44);
-        QByteArray challenge = raw.read(44).mid(12);
-        auto mac = QMessageAuthenticationCode::hash(challenge, "test-code", QCryptographicHash::Sha256);
-        uint8_t h[12];
-        QVERIFY(fr_encode_header(h, FR_AUTH, 32));
-        QByteArray auth(reinterpret_cast<char*>(h), 12);
-        auth += mac;
-        for (char ch : auth) {
-            raw.write(&ch, 1);
-            raw.flush();
-            QTest::qWait(1);
-        }
+        RawSession session;
+        QVERIFY(rawHandshake(raw, session, true));
         QTRY_VERIFY(s.ready());
         QSignalSpy keys(&s, &Peer::key);
-        uint8_t k[4];
-        fr_put_u32(k, 3);
-        fr_encode_header(h, FR_KEY, 4);
-        QByteArray pkt(reinterpret_cast<char*>(h), 12);
-        pkt += QByteArray(reinterpret_cast<char*>(k), 4);
-        raw.write(pkt + pkt);
+        uint8_t keyBytes[4];
+        fr_put_u32(keyBytes, 3);
+        QVERIFY(writeFrame(raw, session, FR_KEY, QByteArray(reinterpret_cast<char*>(keyBytes), 4)));
+        QVERIFY(writeFrame(raw, session, FR_KEY, QByteArray(reinterpret_cast<char*>(keyBytes), 4)));
         QTRY_COMPARE(keys.count(), 2);
-        h[0] = 'X';
-        raw.write(reinterpret_cast<char*>(h), 12);
+        QByteArray corrupt(32, 'X');
+        raw.write(corrupt);
         QTRY_VERIFY(!s.ready());
     }
 
     void unauthenticatedControl() {
         Peer s;
         QSignalSpy spy(&s, &Peer::key);
-        QVERIFY(s.listen(29874, "test-code"));
+        QVERIFY(s.listen(29874, "ABCD-EFGH-JKLM-NPQR-ST23"));
         QTcpSocket raw;
         raw.connectToHost("127.0.0.1", 29874);
         QTRY_VERIFY(raw.state() == QAbstractSocket::ConnectedState);

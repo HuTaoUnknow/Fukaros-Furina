@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.furina.black" android:installLocation="auto" android:versionCode="-- %%INSERT_VERSION_CODE%% --" android:versionName="-- %%INSERT_VERSION_NAME%% --">
  <uses-permission android:name="android.permission.INTERNET"/>
+ <uses-permission android:name="android.permission.CAMERA"/>
+ <uses-feature android:name="android.hardware.camera" android:required="false"/>
  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
@@ -10,6 +12,7 @@
  <!-- %%INSERT_FEATURES -->
  <supports-screens android:anyDensity="true" android:largeScreens="true" android:normalScreens="true" android:smallScreens="true"/>
  <application android:name="org.qtproject.qt.android.bindings.QtApplication" android:hardwareAccelerated="true" android:label="Furina" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:enableOnBackInvokedCallback="true" android:allowBackup="false" android:usesCleartextTraffic="true">
+  <activity android:name="com.furina.black.QrScanActivity" android:exported="false" android:screenOrientation="portrait" android:stateNotNeeded="true"/>
   <activity android:name="com.furina.black.FurinaActivity" android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density" android:label="Furina" android:launchMode="singleTop" android:screenOrientation="unspecified" android:exported="true">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
    <meta-data android:name="android.app.lib_name" android:value="-- %%INSERT_APP_LIB_NAME%% --"/>

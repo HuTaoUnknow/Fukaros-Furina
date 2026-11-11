@@ -1,6 +1,10 @@
 furina_test(single_instance_test single_instance tests/unit/single_instance_test.cpp)
 target_link_libraries(single_instance_test PRIVATE fukaros_platform)
 
+add_executable(pairing_test ${FURINA_ROOT}/tests/unit/pairing_test.c)
+target_link_libraries(pairing_test PRIVATE furina_protocol)
+target_include_directories(pairing_test PRIVATE ${FURINA_ROOT}/third_party/qrcodegen)
+add_test(NAME pairing COMMAND pairing_test)
 add_executable(protocol_test ${FURINA_ROOT}/tests/unit/protocol_test.c)
 target_link_libraries(protocol_test PRIVATE furina_protocol)
 add_test(NAME protocol COMMAND protocol_test)

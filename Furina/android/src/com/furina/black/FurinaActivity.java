@@ -9,7 +9,13 @@ import android.content.res.Configuration;
 import android.media.projection.MediaProjectionManager;
 import android.media.projection.MediaProjectionConfig;
 import android.provider.Settings;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.view.KeyEvent;
+import java.security.KeyStore;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import org.qtproject.qt.android.bindings.QtActivity;
@@ -32,6 +38,8 @@ public class FurinaActivity extends QtActivity {
     public static native void nativeExitFullscreen();
     public static native boolean nativeBackRequested();
     public static native void nativeSessionStop();
+    public static native void nativeQrText(String text);
+    public static native String nativeDecodeQr(byte[] luma, int width, int height);
 
     public static FurinaActivity currentActivity() {
         return current;
@@ -229,5 +237,68 @@ public class FurinaActivity extends QtActivity {
         final FurinaActivity a = current;
         if (a != null)
             a.runOnUiThread(() -> ControlService.key(key));
+    }
+
+    public static void startQrScan() {
+        final FurinaActivity a = current;
+        if (a != null)
+            a.runOnUiThread(() -> a.startActivity(new Intent(a, QrScanActivity.class)));
+    }
+
+    public static void deliverQr(String text) {
+        if (text != null && text.startsWith("furina:"))
+            nativeQrText(text);
+    }
+
+    public static String decodeQr(byte[] luma, int width, int height) {
+        return nativeDecodeQr(luma, width, height);
+    }
+
+    private static SecretKey keystoreKey() throws Exception {
+        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+        store.load(null);
+        if (!store.containsAlias("furina.secure")) {
+            KeyGenerator generator = KeyGenerator.getInstance("AES", "AndroidKeyStore");
+            generator.init(new KeyGenParameterSpec.Builder(
+                               "furina.secure", KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                               .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                               .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                               .setKeySize(256)
+                               .build());
+            return generator.generateKey();
+        }
+        return (SecretKey)store.getKey("furina.secure", null);
+    }
+
+    public static byte[] protectSecret(byte[] plain) {
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, keystoreKey());
+            byte[] iv = cipher.getIV();
+            byte[] body = cipher.doFinal(plain);
+            byte[] out = new byte[1 + iv.length + body.length];
+            out[0] = (byte)iv.length;
+            System.arraycopy(iv, 0, out, 1, iv.length);
+            System.arraycopy(body, 0, out, 1 + iv.length, body.length);
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static byte[] unprotectSecret(byte[] blob) {
+        try {
+            if (blob == null || blob.length < 2)
+                return null;
+            int ivLength = blob[0] & 0xff;
+            if (ivLength < 12 || blob.length <= 1 + ivLength)
+                return null;
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, keystoreKey(),
+                        new javax.crypto.spec.GCMParameterSpec(128, blob, 1, ivLength));
+            return cipher.doFinal(blob, 1 + ivLength, blob.length - 1 - ivLength);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

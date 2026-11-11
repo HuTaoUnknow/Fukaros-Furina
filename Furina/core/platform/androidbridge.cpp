@@ -1,4 +1,5 @@
 #include "androidbridge.h"
+#include "furina_security.h"
 #include <QByteArray>
 #include <QMetaObject>
 #include <QMutex>
@@ -136,6 +137,14 @@ void AndroidBridge::keepSession(bool active) {
 #ifdef Q_OS_ANDROID
     QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity", "keepSession", "(Z)V",
                                        jboolean(active));
+#endif
+}
+
+void AndroidBridge::scanPairingQr() {
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>("com/furina/black/FurinaActivity", "startQrScan", "()V");
+#else
+    emit status("桌面模拟请在设置中粘贴二维码内容。\nEN: Paste the QR text in Settings on the desktop simulation.");
 #endif
 }
 
@@ -279,6 +288,34 @@ extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeSta
     env->ReleaseStringUTFChars(message, s);
     auto* b = bridge;
     QMetaObject::invokeMethod(b, [b, text] { emit b->status(text); }, Qt::QueuedConnection);
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_com_furina_black_FurinaActivity_nativeDecodeQr(JNIEnv* env, jclass,
+                                                                                     jbyteArray luma, jint width,
+                                                                                     jint height) {
+    if (!luma || width < 21 || height < 21)
+        return nullptr;
+    const auto n = env->GetArrayLength(luma);
+    if (n < width * height)
+        return nullptr;
+    QByteArray bytes(n, Qt::Uninitialized);
+    env->GetByteArrayRegion(luma, 0, n, reinterpret_cast<jbyte*>(bytes.data()));
+    char text[700];
+    if (!fr_qr_decode_luma(reinterpret_cast<const uint8_t*>(bytes.constData()), width, height, text, sizeof text))
+        return nullptr;
+    return env->NewStringUTF(text);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeQrText(JNIEnv* env, jclass,
+                                                                                  jstring text) {
+    QMutexLocker lock(&bridgeMutex);
+    if (!bridge || !text)
+        return;
+    const char* s = env->GetStringUTFChars(text, nullptr);
+    const QString payload = QString::fromUtf8(s);
+    env->ReleaseStringUTFChars(text, s);
+    auto* b = bridge;
+    QMetaObject::invokeMethod(b, [b, payload] { emit b->pairingQr(payload); }, Qt::QueuedConnection);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_furina_black_FurinaActivity_nativeStopped(JNIEnv*, jclass) {

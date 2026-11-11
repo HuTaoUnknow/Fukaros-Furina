@@ -14,6 +14,19 @@
 #include <QResizeEvent>
 #include <QButtonGroup>
 #include "desktop_tray.h"
+#include "network_discovery.h"
+#include "furina_security.h"
+#include "pairing_qr.h"
+#include <QDateTime>
+#include <QDialog>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPixmap>
+#include <QPushButton>
+#include <QRandomGenerator>
+#include <QTimer>
+#include <QVBoxLayout>
 
 void MainWindow::start() {
     if (m_castUi->locked())
@@ -28,12 +41,21 @@ void MainWindow::start() {
     }
     if (m_pending)
         return;
-    if (cfg->token->text().size() < 6) {
-        log("请在设置中填写至少 6 位的配对码。",
-            "Enter a pairing code with at least 6 characters in Settings.");
+    if (!fr_pairing_code_valid(cfg->token->text().toUtf8().constData())) {
+        log("配对码须为 20 位字母或数字（不含 I、O、0、1）。",
+            "Pairing code must be 20 letters or digits, without I, O, 0 or 1.");
         openSettings();
         return;
     }
+    const auto expires = cfg->token->property("expiresAt").toLongLong();
+    if (expires && QDateTime::currentMSecsSinceEpoch() > expires) {
+        log("配对码已过期，请重新生成。", "The pairing code has expired. Generate a new one.");
+        openSettings();
+        return;
+    }
+    m_peer.useStoredIdentity();
+    m_peer.setExpectedPeer({});
+    m_peer.setOfferWindow(expires ? expires : QDateTime::currentMSecsSinceEpoch() + 10 * 60 * 1000, false);
     stop();
     m_pending = true;
     m_castUi->lockPending();
@@ -92,6 +114,115 @@ void MainWindow::start() {
             },
             false);
     }
+}
+
+void MainWindow::showPairingTools() {
+    auto* layout = qobject_cast<QVBoxLayout*>(cfg->pairingGroup->layout());
+    if (!layout || cfg->pairingGroup->findChild<QPushButton*>("showQr"))
+        return;
+    auto* row = new QHBoxLayout();
+    auto* generate = new QPushButton("生成配对码", cfg->pairingGroup);
+    auto* qr = new QPushButton("显示配对二维码", cfg->pairingGroup);
+    auto* fingerprint = new QLabel(cfg->pairingGroup);
+    generate->setObjectName("newPairingCode");
+    qr->setObjectName("showQr");
+    fingerprint->setObjectName("localFingerprint");
+    fingerprint->setWordWrap(true);
+    m_peer.useStoredIdentity();
+    char shown[20];
+    const auto key = m_peer.localPublicKey();
+    fr_fingerprint(reinterpret_cast<const uint8_t*>(key.constData()), shown);
+    fingerprint->setText(QString("本机指纹 %1").arg(shown));
+    row->addWidget(generate);
+    row->addWidget(qr);
+    layout->addLayout(row);
+    layout->addWidget(fingerprint);
+    connect(generate, &QPushButton::clicked, this, &MainWindow::newPairingCode);
+    connect(qr, &QPushButton::clicked, this, &MainWindow::showPairingQr);
+}
+
+void MainWindow::newPairingCode() {
+    uint8_t random[16];
+    for (int i = 0; i < 16;) {
+        const quint32 value = QRandomGenerator::system()->generate();
+        for (int shift = 0; shift < 32 && i < 16; shift += 8)
+            random[i++] = uint8_t(value >> shift);
+    }
+    char code[FR_PAIRING_TEXT];
+    fr_pairing_code_generate(code, random);
+    cfg->token->setText(QString::fromLatin1(code));
+    cfg->token->setProperty("expiresAt", QDateTime::currentMSecsSinceEpoch() + 10 * 60 * 1000);
+}
+
+void MainWindow::showPairingQr() {
+    if (m_castUi->locked())
+        return;
+    m_peer.useStoredIdentity();
+    uint8_t secret[32], ip[4] = {127, 0, 0, 1};
+    QString host = furinaLanAddress(false);
+    if (host.isEmpty())
+        host = "127.0.0.1";
+    const quint32 v4 = QHostAddress(host).toIPv4Address();
+    ip[0] = uint8_t(v4 >> 24);
+    ip[1] = uint8_t(v4 >> 16);
+    ip[2] = uint8_t(v4 >> 8);
+    ip[3] = uint8_t(v4);
+    for (int i = 0; i < 32;) {
+        const quint32 value = QRandomGenerator::system()->generate();
+        for (int shift = 0; shift < 32 && i < 32; shift += 8)
+            secret[i++] = uint8_t(value >> shift);
+    }
+    const auto expiry = QDateTime::currentSecsSinceEpoch() + 120;
+    uint8_t payload[FR_QR_PAYLOAD];
+    const auto pub = m_peer.localPublicKey();
+    char text[360];
+    if (!fr_qr_payload_build(payload, ip, 27183, expiry, secret, reinterpret_cast<const uint8_t*>(pub.constData())) ||
+        !fr_qr_text_encode(text, sizeof text, payload)) {
+        log("无法生成配对二维码。", "Could not create a pairing QR code.");
+        return;
+    }
+    m_peer.setExpectedPeer({});
+    m_peer.setOfferWindow(expiry * 1000, true);
+    if (!m_peer.listen(27183, QString::fromLatin1(text), host))
+        return;
+    char shown[20];
+    fr_fingerprint(reinterpret_cast<const uint8_t*>(pub.constData()), shown);
+    QDialog dialog(this);
+    dialog.setWindowTitle("配对二维码");
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* image = new QLabel(&dialog);
+    image->setPixmap(QPixmap::fromImage(furinaQrImage(QString::fromLatin1(text))));
+    image->setAlignment(Qt::AlignCenter);
+    auto* hint = new QLabel(
+        QString("请用平板相机扫描。二维码 2 分钟内有效，且只能使用一次。\n地址 %1:27183\n指纹 %2")
+            .arg(host, shown),
+        &dialog);
+    hint->setWordWrap(true);
+    auto* copy = new QLineEdit(QString::fromLatin1(text), &dialog);
+    copy->setReadOnly(true);
+    auto* close = new QPushButton("关闭", &dialog);
+    layout->addWidget(image);
+    layout->addWidget(hint);
+    layout->addWidget(copy);
+    layout->addWidget(close);
+    QTimer countdown;
+    countdown.setInterval(1000);
+    connect(&countdown, &QTimer::timeout, &dialog, [&, expiry, hint, host, shown = QString::fromLatin1(shown)] {
+        const auto left = expiry - QDateTime::currentSecsSinceEpoch();
+        hint->setText(QString("请用平板相机扫描。剩余 %1 秒，只能使用一次。\n地址 %2:27183\n指纹 %3")
+                          .arg(qMax(qint64(0), left))
+                          .arg(host, shown));
+        if (left <= 0)
+            dialog.reject();
+    });
+    countdown.start();
+    connect(&m_peer, &Peer::connected, &dialog, &QDialog::accept);
+    connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
+    log("已显示配对二维码，等待平板扫描。", "Showing a pairing QR code. Waiting for the tablet to scan it.");
+    dialog.exec();
+    disconnect(&m_peer, &Peer::connected, &dialog, &QDialog::accept);
+    if (!m_peer.ready())
+        m_peer.close();
 }
 
 void MainWindow::connectUsb(int generation) {

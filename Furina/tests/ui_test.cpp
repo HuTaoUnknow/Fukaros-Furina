@@ -124,8 +124,8 @@ class UiTest : public QObject {
         auto* consent = w.findChild<SessionConsent*>();
         Peer other;
         QSignalSpy controls(&other, &Peer::session), status(bridge, &AndroidBridge::status);
-        QVERIFY(other.listen(29909, "resume-session-code", "127.0.0.1"));
-        peer->connectTo("127.0.0.1", 29909, "resume-session-code");
+        QVERIFY(other.listen(29909, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        peer->connectTo("127.0.0.1", 29909, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(peer->ready() && other.ready());
         other.sendApproval(4701, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE | FR_APPROVAL_EXTEND);
         QTRY_VERIFY(consent->pending());
@@ -205,9 +205,9 @@ class UiTest : public QObject {
         modes->click();
         // Approval stays accessible even when the log page is hidden.
         Peer other;
-        QVERIFY(other.listen(29905, "portrait-consent-code"));
+        QVERIFY(other.listen(29905, "ABCD-EFGH-JKLM-NPQR-ST23"));
         auto* peer = w.findChild<Peer*>();
-        peer->connectTo("127.0.0.1", 29905, "portrait-consent-code");
+        peer->connectTo("127.0.0.1", 29905, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(other.ready() && peer->ready());
         other.sendApproval(4501, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
         auto* consent = w.findChild<QWidget*>("consentPanel");
@@ -260,8 +260,8 @@ class UiTest : public QObject {
         auto* peer = w.findChild<Peer*>();
         Peer other;
         QSignalSpy approvals(&other, &Peer::approval);
-        QVERIFY(other.listen(29907, "extension-lock-code"));
-        peer->connectTo("127.0.0.1", 29907, "extension-lock-code");
+        QVERIFY(other.listen(29907, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        peer->connectTo("127.0.0.1", 29907, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(peer->ready() && other.ready());
         other.sendApproval(4601, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE | FR_APPROVAL_EXTEND);
         QTRY_VERIFY(consent->pending());
@@ -278,7 +278,7 @@ class UiTest : public QObject {
         w.findChild<QPushButton*>("start")->click();
         QTRY_VERIFY(!other.ready());
         QCOMPARE(bridge->property("extensionOrientation").toInt(), -1);
-        peer->connectTo("127.0.0.1", 29907, "extension-lock-code");
+        peer->connectTo("127.0.0.1", 29907, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(peer->ready() && other.ready());
         other.sendApproval(4602, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE | FR_APPROVAL_EXTEND);
         QTRY_VERIFY(consent->pending());
@@ -323,7 +323,7 @@ class UiTest : public QObject {
 
     void usbServiceIncludesDiscovery() {
         MainWindow w;
-        w.findChild<QLineEdit*>("token")->setText("usb-mobile-test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
         // A Wi-Fi-only bind address must not prevent the USB page from listening.
         w.findChild<QLineEdit*>("host")->setText("invalid-wifi-address");
@@ -364,8 +364,8 @@ class UiTest : public QObject {
         auto* view = w.findChild<ScreenView*>();
         Peer other;
         QSignalSpy approvals(&other, &Peer::approval);
-        QVERIFY(other.listen(29904, "stop-sync-code"));
-        peer->connectTo("127.0.0.1", 29904, "stop-sync-code");
+        QVERIFY(other.listen(29904, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        peer->connectTo("127.0.0.1", 29904, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(peer->ready() && other.ready());
         // Authentication alone is idle, and consent is still a waiting state.
         QCOMPARE(control->state(), CastControl::Start);
@@ -443,7 +443,7 @@ class UiTest : public QObject {
         QCOMPARE(button->iconSize(), w.findChild<QPushButton*>("settings")->iconSize());
         QCOMPARE(control->state(), CastControl::Start);
         w.findChild<QLineEdit*>("host")->setText("0.0.0.0");
-        w.findChild<QLineEdit*>("token")->setText("control-test-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         QVERIFY(!w.findChild<QLabel*>("castHint") && !w.findChild<QLabel*>("performanceHint"));
         QVERIFY(w.findChild<QFrame*>("modeSeparator")->isVisible());
         QVERIFY(w.findChild<QFrame*>("resolutionSeparator")->isVisible());
@@ -498,7 +498,7 @@ class UiTest : public QObject {
         w.findChild<QPushButton*>("settings")->click();
         auto* dialog = w.findChild<QDialog*>("SettingsDialog");
         QTRY_VERIFY(dialog->isVisible());
-        w.findChild<QLineEdit*>("token")->setText("black-ui-code");
+        w.findChild<QLineEdit*>("token")->setText("ABCD-EFGH-JKLM-NPQR-ST23");
         w.findChild<QLineEdit*>("host")->setText("0.0.0.0");
         w.findChild<QCheckBox*>("allowControl")->setChecked(false);
         dialog->accept();
@@ -508,7 +508,7 @@ class UiTest : public QObject {
         QSignalSpy connected(&client, &Peer::connected), status(&client, &Peer::status),
             sessions(&client, &Peer::session), approvals(&client, &Peer::approval),
             profiles(&client, &Peer::profile);
-        client.connectTo("127.0.0.2", 27183, "black-ui-code");
+        client.connectTo("127.0.0.2", 27183, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(connected.count(), 1);
         QCOMPARE(control->state(), CastControl::Waiting);
         client.sendApproval(1001, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
@@ -581,7 +581,7 @@ class UiTest : public QObject {
             }
             start->click();
             if (!client.ready())
-                client.connectTo("127.0.0.2", 27183, "black-ui-code");
+                client.connectTo("127.0.0.2", 27183, "ABCD-EFGH-JKLM-NPQR-ST23");
             QTRY_VERIFY(client.ready());
             QTRY_COMPARE(requestCount(approvals), count + 1);
             const auto row = approvals.last();
@@ -642,7 +642,7 @@ class UiTest : public QObject {
         QTRY_VERIFY(!w.findChild<Peer*>()->ready());
         QVERIFY(state->occupied() && (start->isEnabled() && control->state() == CastControl::Stop) &&
                 !share->isEnabled());
-        client.connectTo("127.0.0.2", 27183, "black-ui-code");
+        client.connectTo("127.0.0.2", 27183, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(client.ready());
         const auto replies = approvals.count();
         client.sendApproval(2001, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);

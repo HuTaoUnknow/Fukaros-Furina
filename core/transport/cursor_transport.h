@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include "cursor_wire.h"
+#include "furina_security.h"
 
 // A second TCP connection uses the same listening port/ADB forward. Its key is
 // derived from the already-authenticated main session's fresh challenge.
@@ -16,6 +17,7 @@ class CursorTransport {
     QList<QPointer<QTcpSocket>> m_candidates;
     QByteArray m_key, m_position, m_shape;
     bool m_ready = false, m_server = false, m_shapeDirty = false, m_positionDirty = false;
+    uint64_t m_sendCount = 0;
     QTimer m_retry;
     QHostAddress m_address, m_local;
     quint16 m_port = 0;
@@ -46,17 +48,27 @@ class CursorTransport {
         }
     }
 
+    bool seal(QTcpSocket* socket, uint8_t direction, uint64_t* counter, const QByteArray& plain) {
+        if (!socket || m_key.size() != 32 || plain.size() > 1024 * 1024 + 16)
+            return false;
+        QByteArray out(plain.size() + 20, Qt::Uninitialized);
+        size_t n = 0;
+        if (fr_cursor_seal(reinterpret_cast<const uint8_t*>(m_key.constData()), direction, counter,
+                           reinterpret_cast<const uint8_t*>(plain.constData()), size_t(plain.size()),
+                           reinterpret_cast<uint8_t*>(out.data()), size_t(out.size()), &n) != 1)
+            return false;
+        return socket->write(out.constData(), qsizetype(n)) == qsizetype(n);
+    }
+
     void write(const QByteArray& p) {
-        uint8_t h[4];
-        fr_put_u32(h, p.size());
-        m_socket->write(reinterpret_cast<char*>(h), 4);
-        m_socket->write(p);
+        seal(m_socket, m_server ? 2 : 1, &m_sendCount, p);
     }
 
     void watch(QTcpSocket* s, bool accepted) {
         struct Input {
             QByteArray bytes;
             bool authenticated = false;
+            uint64_t recvCount = 0;
         };
 
         auto in = std::make_shared<Input>();
@@ -72,48 +84,55 @@ class CursorTransport {
                 s->abort();
                 return;
             }
+            auto openNext = [&](QByteArray& plain) {
+                plain.clear();
+                if (m_key.size() != 32 || in->bytes.size() < 4)
+                    return 0;
+                const auto declared = fr_get_u32(reinterpret_cast<const uint8_t*>(in->bytes.constData()));
+                if (declared > 1024 * 1024 + 16) {
+                    s->abort();
+                    return -1;
+                }
+                plain.resize(int(declared));
+                size_t consumed = 0, plain_n = 0;
+                const int rc = fr_cursor_open(reinterpret_cast<const uint8_t*>(m_key.constData()), accepted ? 1 : 2,
+                                              &in->recvCount, reinterpret_cast<const uint8_t*>(in->bytes.constData()),
+                                              size_t(in->bytes.size()), &consumed,
+                                              reinterpret_cast<uint8_t*>(plain.data()), size_t(plain.size()), &plain_n);
+                if (rc == 1) {
+                    in->bytes.remove(0, int(consumed));
+                    plain.resize(int(plain_n));
+                }
+                return rc;
+            };
             if (!in->authenticated) {
-                int n = accepted ? 32 : 4;
-                if (in->bytes.size() < n)
+                QByteArray plain;
+                const int rc = openNext(plain);
+                if (rc == 0)
                     return;
-                if (m_key.size() != 32) {
+                const auto expect = accepted ? QByteArray("CUR2") : QByteArray("CUR1");
+                if (rc < 0 || plain != expect || (accepted && m_socket && m_socket != s)) {
                     s->abort();
                     return;
                 }
-                bool ok = true;
-                if (accepted) {
-                    unsigned diff = 0;
-                    for (int i = 0; i < 32; ++i)
-                        diff |= uint8_t(in->bytes[i]) ^ uint8_t(m_key.at(i));
-                    ok = ok && !diff && (!m_socket || m_socket == s);
-                } else
-                    ok = ok && in->bytes.first(4) == "CUR1";
-                if (!ok) {
-                    s->abort();
-                    return;
-                }
-                in->bytes.remove(0, n);
                 in->authenticated = true;
-                if (accepted)
-                    s->write("CUR1", 4);
+                if (accepted && !seal(s, 2, &m_sendCount, QByteArray("CUR1"))) {
+                    s->abort();
+                    return;
+                }
                 ready(s);
             }
-            while (in->bytes.size() >= 4) {
-                auto n = fr_get_u32(reinterpret_cast<const uint8_t*>(in->bytes.constData()));
-                if (n < 4 || n > 1024 * 1024 + 16) {
-                    s->abort();
-                    return;
-                }
-                if (in->bytes.size() < 4 + int(n))
+            while (in->authenticated && in->bytes.size() >= 4) {
+                QByteArray plain;
+                const int rc = openNext(plain);
+                if (rc == 0)
                     break;
-                auto p = in->bytes.mid(4, n);
-                in->bytes.remove(0, 4 + n);
-                if (!fr_cursor_packet_valid(p)) {
+                if (rc < 0 || !fr_cursor_packet_valid(plain)) {
                     s->abort();
                     return;
                 }
                 if (packet)
-                    packet(p);
+                    packet(plain);
             }
         });
         QObject::connect(s, &QTcpSocket::bytesWritten, m_owner, [this] { flush(); });
@@ -151,7 +170,8 @@ class CursorTransport {
         if (!accepted)
             QObject::connect(s, &QTcpSocket::connected, m_owner, [this, s] {
                 s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
-                s->write(m_key);
+                if (!seal(s, 1, &m_sendCount, QByteArray("CUR2")))
+                    s->abort();
             });
     }
 
@@ -205,6 +225,7 @@ class CursorTransport {
             }
         m_position.clear();
         m_shape.clear();
+        m_sendCount = 0;
         m_shapeDirty = m_positionDirty = false;
         if (was && availability)
             availability(false);

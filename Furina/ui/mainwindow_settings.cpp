@@ -25,9 +25,10 @@ void MainWindow::loadSettings() {
         m_android.setCaptureResolution(m_videoPolicy.edge);
     }
     cfg->connectionTabs->setCurrentIndex(s.value("connectionTab", 0).toInt() == 1 ? 1 : 0);
-    cfg->host->setText(s.value("host", "0.0.0.0").toString());
+    cfg->host->setText(s.value("host").toString());
     cfg->serial->setText(s.value("serial", m_android.deviceCode()).toString());
-    cfg->token->setText(s.value("token").toString());
+    if (cfg->token->text().isEmpty())
+        newPairingCode();
     cfg->allowControl->setChecked(s.value("allowControl", false).toBool());
 }
 
@@ -38,7 +39,7 @@ void MainWindow::saveSettings() {
     s.setValue("connectionTab", cfg->connectionTabs->currentIndex());
     s.setValue("host", cfg->host->text());
     s.setValue("serial", cfg->serial->text());
-    s.setValue("token", cfg->token->text());
+    s.remove("token");
     s.setValue("allowControl", cfg->allowControl->isChecked());
     s.setValue("castMode", ui->extend->isChecked() ? 1 : 0);
 }
@@ -105,9 +106,9 @@ void MainWindow::initializeSettings() {
         }
     });
     QSettings s;
-    if (s.value("token").toString().size() < 6)
-        s.setValue("token", QString::number(QRandomGenerator::system()->bounded(100000000, 999999999)));
+    s.remove("token");
     loadSettings();
+    showPairingTools();
     new PointerSettings(&m_peer, this, false);
     new ScreenScaleSettings(&m_peer, this, false);
     connect(&m_peer, &Peer::cursor, this, [this](const QByteArray& data) {

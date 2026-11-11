@@ -49,9 +49,9 @@ class UsbNetworkTest : public QObject {
         QCOMPARE(found.first()[0].toString(), QString("127.0.0.3"));
         QCOMPARE(found.first()[1].toString(), QString("127.0.0.2"));
         Peer server, client;
-        QVERIFY(server.listen(27195, "usb-network-test", "127.0.0.3"));
+        QVERIFY(server.listen(27195, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.3"));
         QSignalSpy ready(&client, &Peer::connected), status(&server, &Peer::status);
-        client.connectTo(found.first()[0].toString(), 27195, "usb-network-test", found.first()[1].toString());
+        client.connectTo(found.first()[0].toString(), 27195, "ABCD-EFGH-JKLM-NPQR-ST23", found.first()[1].toString());
         QTRY_VERIFY(client.ready() && server.ready());
         QCOMPARE(ready.count(), 1);
         auto* transport = client.findChild<QTcpSocket*>();
@@ -99,7 +99,7 @@ class UsbNetworkTest : public QObject {
     void invalidSourceCannotFallBack() {
         Peer client;
         QSignalSpy disconnected(&client, &Peer::disconnected), ready(&client, &Peer::connected);
-        client.connectTo("127.0.0.3", 27195, "usb-network-test", "invalid-source");
+        client.connectTo("127.0.0.3", 27195, "ABCD-EFGH-JKLM-NPQR-ST23", "invalid-source");
         QCOMPARE(disconnected.count(), 1);
         QVERIFY(ready.isEmpty() && !client.ready());
     }

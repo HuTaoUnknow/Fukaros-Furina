@@ -6,11 +6,26 @@ add_library(furina_protocol STATIC
     ${FURINA_ROOT}/core/protocol/screen_scale.c
     ${FURINA_ROOT}/core/protocol/video_policy.c
     ${FURINA_ROOT}/core/video/cursor_shape.c
+    ${FURINA_ROOT}/core/security/furina_security.c
+    ${FURINA_ROOT}/third_party/monocypher/monocypher.c
+    ${FURINA_ROOT}/third_party/qrcodegen/qrcodegen.c
+    ${FURINA_ROOT}/third_party/quirc/quirc.c
+    ${FURINA_ROOT}/third_party/quirc/decode.c
+    ${FURINA_ROOT}/third_party/quirc/identify.c
+    ${FURINA_ROOT}/third_party/quirc/version_db.c
 )
 set_target_properties(furina_protocol PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(furina_protocol PUBLIC
-    ${FURINA_ROOT}/core/protocol ${FURINA_ROOT}/core/video
+    ${FURINA_ROOT}/core/protocol ${FURINA_ROOT}/core/video ${FURINA_ROOT}/core/security
 )
+target_include_directories(furina_protocol PRIVATE
+    ${FURINA_ROOT}/third_party/monocypher
+    ${FURINA_ROOT}/third_party/qrcodegen
+    ${FURINA_ROOT}/third_party/quirc
+)
+if(NOT WIN32)
+    target_link_libraries(furina_protocol PUBLIC m)
+endif()
 
 add_library(furina_diagnostics STATIC
     ${FURINA_ROOT}/core/diagnostics/debug_log.cpp
@@ -23,9 +38,17 @@ add_library(furina_transport STATIC
     ${FURINA_ROOT}/core/transport/peer.cpp
     ${FURINA_ROOT}/core/transport/peer.h
     ${FURINA_ROOT}/core/transport/network_discovery.cpp
+    ${FURINA_ROOT}/core/security/secure_store.cpp
+    ${FURINA_ROOT}/core/security/secure_store.h
+    ${FURINA_ROOT}/core/security/pairing_qr.cpp
 )
 target_include_directories(furina_transport PUBLIC ${FURINA_ROOT}/core/transport)
+target_include_directories(furina_transport PRIVATE
+    ${FURINA_ROOT}/third_party/monocypher ${FURINA_ROOT}/third_party/qrcodegen)
 target_link_libraries(furina_transport PUBLIC furina_protocol Qt6::Network Qt6::Gui)
+if(WIN32)
+    target_link_libraries(furina_transport PUBLIC crypt32)
+endif()
 
 add_library(furina_widgets STATIC
     ${FURINA_ROOT}/ui/widgets/screenview.cpp

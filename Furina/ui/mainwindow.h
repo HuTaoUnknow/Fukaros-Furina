@@ -67,6 +67,10 @@ class MainWindow : public QMainWindow {
     void saveSettings();
     void openSettings();
     void refreshAddresses();
+    void showPairingTools();
+    void newPairingCode();
+    void scanQr();
+    void applyQr(const QString& text);
     void start();
     void stop();
     void startCapture();

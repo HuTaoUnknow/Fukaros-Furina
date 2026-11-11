@@ -3,8 +3,17 @@
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
+#include "furina_security.h"
+#include "pairing_qr.h"
 #include <QSettings>
 #include <QRandomGenerator>
+#include <QDateTime>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QNetworkInterface>
 #include <QGuiApplication>
 #include <QScreen>
@@ -25,13 +34,41 @@ void MainWindow::start() {
         requestDirection();
         return;
     }
-    if (cfg->token->text().size() < 6) {
-        log("请填写至少 6 位的配对码。", "Enter a pairing code with at least 6 characters.");
+    if (!fr_pairing_code_valid(cfg->token->text().toUtf8().constData())) {
+        log("配对码须为 20 位字母或数字（不含 I、O、0、1）。",
+            "Pairing code must be 20 letters or digits, without I, O, 0 or 1.");
+        openSettings();
+        return;
+    }
+    const auto expires = cfg->token->property("expiresAt").toLongLong();
+    if (expires && QDateTime::currentMSecsSinceEpoch() > expires) {
+        log("配对码已过期，请重新生成。", "The pairing code has expired. Generate a new one.");
         openSettings();
         return;
     }
     if (!m_listening) {
-        const auto bind = cfg->connectionTabs->currentIndex() == 0 ? QString("0.0.0.0") : cfg->host->text();
+        QString bind;
+        if (cfg->connectionTabs->currentIndex() == 0) {
+            bind = furinaUsbAddress();
+            if (bind.isEmpty()) {
+                bind = "0.0.0.0";
+                log("尚未发现 USB 网卡，暂时监听所有 IPv4，并限制连接次数。",
+                    "No USB adapter yet. Listening on all IPv4 with connection limits.");
+            }
+        } else {
+            bind = cfg->host->text().trimmed();
+            if (bind.isEmpty())
+                bind = furinaLanAddress(false);
+            if (bind.isEmpty() || bind == "0.0.0.0") {
+                log("请填写本机局域网 IP，不再默认监听所有网卡。",
+                    "Enter this device's LAN IP. Listening on every interface is no longer the default.");
+                openSettings();
+                return;
+            }
+        }
+        m_peer.useStoredIdentity();
+        m_peer.setExpectedPeer({});
+        m_peer.setOfferWindow(expires ? expires : QDateTime::currentMSecsSinceEpoch() + 10 * 60 * 1000, false);
         m_listening = m_peer.listen(27183, cfg->token->text(), bind);
         if (!m_listening)
             return;
@@ -271,4 +308,81 @@ void MainWindow::connectTransportEvents() {
         m_sessionActive = false;
         m_peer.sendSession(FR_STOP_SHARE);
     });
+    connect(&m_android, &AndroidBridge::pairingQr, this, &MainWindow::applyQr);
+}
+
+void MainWindow::showPairingTools() {
+    auto* layout = qobject_cast<QVBoxLayout*>(cfg->pairingGroup->layout());
+    if (!layout || cfg->pairingGroup->findChild<QPushButton*>("newPairingCode"))
+        return;
+    auto* row = new QHBoxLayout();
+    auto* generate = new QPushButton("生成配对码", cfg->pairingGroup);
+    auto* scan = new QPushButton("扫描二维码", cfg->pairingGroup);
+    auto* fingerprint = new QLabel(cfg->pairingGroup);
+    auto* payload = new QLineEdit(cfg->pairingGroup);
+    generate->setObjectName("newPairingCode");
+    scan->setObjectName("scanQr");
+    fingerprint->setObjectName("localFingerprint");
+    payload->setObjectName("qrText");
+    payload->setPlaceholderText("无法打开相机时，粘贴电脑二维码内容");
+    m_peer.useStoredIdentity();
+    char shown[20];
+    const auto key = m_peer.localPublicKey();
+    fr_fingerprint(reinterpret_cast<const uint8_t*>(key.constData()), shown);
+    fingerprint->setText(QString("本机指纹 %1").arg(shown));
+    fingerprint->setWordWrap(true);
+    row->addWidget(generate);
+    row->addWidget(scan);
+    layout->addLayout(row);
+    layout->addWidget(fingerprint);
+    layout->addWidget(payload);
+    connect(generate, &QPushButton::clicked, this, &MainWindow::newPairingCode);
+    connect(scan, &QPushButton::clicked, this, &MainWindow::scanQr);
+}
+
+void MainWindow::newPairingCode() {
+    uint8_t random[16];
+    for (int i = 0; i < 16;) {
+        const quint32 value = QRandomGenerator::system()->generate();
+        for (int shift = 0; shift < 32 && i < 16; shift += 8)
+            random[i++] = uint8_t(value >> shift);
+    }
+    char code[FR_PAIRING_TEXT];
+    fr_pairing_code_generate(code, random);
+    cfg->token->setText(QString::fromLatin1(code));
+    cfg->token->setProperty("expiresAt", QDateTime::currentMSecsSinceEpoch() + 10 * 60 * 1000);
+}
+
+void MainWindow::scanQr() {
+#ifdef Q_OS_ANDROID
+    m_android.scanPairingQr();
+#else
+    auto* field = cfg->pairingGroup->findChild<QLineEdit*>("qrText");
+    const auto pasted = field ? field->text().trimmed() : QString();
+    applyQr(pasted.isEmpty() ? QInputDialog::getText(this, "扫描二维码", "粘贴电脑上的二维码内容") : pasted);
+#endif
+}
+
+void MainWindow::applyQr(const QString& text) {
+    uint8_t psk[32];
+    fr_qr_info info{};
+    int error = 0;
+    if (fr_credential_from_text(text.toUtf8().constData(), psk, &info, &error) != 2) {
+        log("二维码内容无效。", "The QR contents are invalid.");
+        return;
+    }
+    memset(psk, 0, sizeof psk);
+    if (info.expiry_unix * 1000 < QDateTime::currentMSecsSinceEpoch()) {
+        log("二维码已过期，请让电脑重新显示。", "The QR code has expired. Show a new one on the PC.");
+        return;
+    }
+    const auto host = QString("%1.%2.%3.%4").arg(info.ipv4[0]).arg(info.ipv4[1]).arg(info.ipv4[2]).arg(info.ipv4[3]);
+    if (m_listening)
+        stop();
+    m_peer.useStoredIdentity();
+    m_peer.setExpectedPeer(QByteArray(reinterpret_cast<const char*>(info.public_key), 32));
+    m_peer.setOfferWindow(info.expiry_unix * 1000, true);
+    log(QString("正在连接 %1:%2。").arg(host).arg(info.port),
+        QString("Connecting to %1:%2.").arg(host).arg(info.port));
+    m_peer.connectTo(host, info.port, text);
 }

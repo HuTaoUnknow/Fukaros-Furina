@@ -5,8 +5,10 @@
 #include <QScreen>
 #include <QFileInfo>
 #include <QDir>
+#include <QByteArray>
 #ifdef Q_OS_WIN
 #include <shellapi.h>
+#include <aclapi.h>
 #endif
 VirtualDisplayController::VirtualDisplayController(QObject* parent) : QObject(parent) {
     m_poll.setInterval(100);
@@ -54,6 +56,47 @@ void VirtualDisplayController::fail(const QString& cn, const QString& en) {
     emit failed(cn, en);
 }
 
+#ifdef Q_OS_WIN
+static bool userCanWrite(const QString& path) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return true;
+    DWORD needed = 0;
+    const auto native = QDir::toNativeSeparators(QFileInfo(path).absoluteFilePath()).toStdWString();
+    GetFileSecurityW(native.c_str(),
+                     OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, nullptr, 0,
+                     &needed);
+    QByteArray descriptor(int(needed), 0);
+    if (!needed ||
+        !GetFileSecurityW(native.c_str(),
+                          OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                          descriptor.data(), needed, &needed)) {
+        CloseHandle(token);
+        return true;
+    }
+    GENERIC_MAPPING mapping = {FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS};
+    DWORD access = FILE_WRITE_DATA | FILE_APPEND_DATA | DELETE | FILE_WRITE_ATTRIBUTES | WRITE_DAC | WRITE_OWNER;
+    MapGenericMask(&access, &mapping);
+    PRIVILEGE_SET privileges{};
+    DWORD privilegeSize = sizeof privileges, granted = 0;
+    BOOL allowed = FALSE;
+    const auto checked =
+        AccessCheck(reinterpret_cast<PSECURITY_DESCRIPTOR>(descriptor.data()), token, access, &mapping, &privileges,
+                    &privilegeSize, &granted, &allowed);
+    CloseHandle(token);
+    return !checked || allowed == TRUE;
+}
+
+static bool helperPathAllowed(const QString& helper) {
+    wchar_t profile[MAX_PATH]{};
+    const DWORD n = GetEnvironmentVariableW(L"USERPROFILE", profile, MAX_PATH);
+    const auto native = QDir::toNativeSeparators(QFileInfo(helper).absoluteFilePath());
+    if (!n || native.startsWith(QString::fromWCharArray(profile), Qt::CaseInsensitive))
+        return false;
+    return !userCanWrite(helper) && !userCanWrite(QFileInfo(helper).absolutePath());
+}
+#endif
+
 void VirtualDisplayController::ensure(bool portrait) {
     if (m_preparing)
         return;
@@ -96,6 +139,12 @@ void VirtualDisplayController::ensure(bool portrait) {
     emit status(
         "首次启用扩展：正在安装虚拟显示驱动，请允许系统安装提示。",
         "First extension: installing the virtual display driver. Allow the Windows installation prompt.");
+    if (!helperPathAllowed(helper)) {
+        fail("虚拟显示助手位于当前用户可写目录，已拒绝提权运行。请安装到 Program Files。",
+             "The virtual display helper is in a user-writable directory and will not be launched elevated. "
+             "Install Fukaros under Program Files.");
+        return;
+    }
     const std::wstring exe = QDir::toNativeSeparators(helper).toStdWString();
     const std::wstring args = ("install \"" + QDir::toNativeSeparators(package) + "\"").toStdWString();
     SHELLEXECUTEINFOW info{};

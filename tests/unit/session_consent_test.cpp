@@ -59,8 +59,8 @@ class ConsentTest : public QObject {
         SessionConsent remote(&server, &receiver), local(&client, &sender);
         bool portrait = true;
         remote.setReceiverOrientation([&] { return portrait; });
-        QVERIFY(server.listen(29883, "orientation-code"));
-        client.connectTo("127.0.0.1", 29883, "orientation-code");
+        QVERIFY(server.listen(29883, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29883, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(server.ready() && client.ready());
         QSignalSpy requests(&server, &Peer::approval);
         QVERIFY(local.request(true, true));
@@ -107,8 +107,8 @@ class ConsentTest : public QObject {
         QSignalSpy connected(&client, &Peer::connected), requests(&server, &Peer::approval),
             approvedLocal(&local, &SessionConsent::approved),
             approvedRemote(&remote, &SessionConsent::approved);
-        QVERIFY(server.listen(29881, "consent-code"));
-        client.connectTo("127.0.0.1", 29881, "consent-code");
+        QVERIFY(server.listen(29881, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29881, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(connected.count(), 1);
         QVERIFY(local.request(true, true));
         QTRY_VERIFY(receiver.findChild<QWidget*>("consentPanel")->isVisible());
@@ -158,8 +158,8 @@ class ConsentTest : public QObject {
         ConsentWindow receiver, sender;
         SessionConsent remote(&server, &receiver), local(&client, &sender);
         QSignalSpy connected(&client, &Peer::connected), ended(&local, &SessionConsent::ended);
-        QVERIFY(server.listen(29882, "consent-code"));
-        client.connectTo("127.0.0.1", 29882, "consent-code");
+        QVERIFY(server.listen(29882, "ABCD-EFGH-JKLM-NPQR-ST23"));
+        client.connectTo("127.0.0.1", 29882, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_COMPARE(connected.count(), 1);
         local.setTimeout(100);
         QVERIFY(local.request(true, false));

@@ -56,7 +56,7 @@
             <item>
              <widget class="QLineEdit" name="token">
               <property name="placeholderText">
-               <string>至少 6 位，与对端一致</string>
+               <string>20 位字母数字，10 分钟内有效</string>
               </property>
               <property name="readOnly">
                <bool>false</bool>

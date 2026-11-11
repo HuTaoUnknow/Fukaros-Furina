@@ -26,7 +26,10 @@ void MainWindow::loadSettings() {
     cfg->adbPath->setText(adb);
     cfg->serial->setText(s.value("serial").toString());
     cfg->host->setText(s.value("host", QString()).toString());
-    cfg->token->setText(s.value("token").toString());
+    s.remove("token");
+    if (cfg->token->text().isEmpty())
+        newPairingCode();
+    showPairingTools();
     {
         const QSignalBlocker block(m_resolution);
         m_resolution->setValue(s.value("resolution", 0).toInt());
@@ -45,7 +48,7 @@ void MainWindow::saveSettings() {
     s.setValue("adb", cfg->adbPath->text());
     s.setValue("serial", cfg->serial->text());
     s.setValue("host", cfg->host->text());
-    s.setValue("token", cfg->token->text());
+    s.remove("token");
     s.setValue("usbMode", cfg->usbMode->currentIndex());
     s.setValue("usbHost", cfg->usbHost->text());
     s.setValue("transport", cfg->transport->currentIndex());

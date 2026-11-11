@@ -7,7 +7,8 @@
 ```text
 core/                           双端共享实现
   protocol/                     C 协议、视频包、清晰度策略、鼠标报文
-  transport/                    TCP 连接、独立鼠标通道、设备发现
+  security/                     配对码、二维码、X25519 握手、记录层加密、系统密钥存储
+  transport/                    加密 TCP 连接、独立鼠标通道、设备发现
   session/                      对端同意、投屏状态、开始停止、全屏确认
   settings/                     设置迁移、鼠标偏好与双端同步
   diagnostics/                  中英日志、参数翻译、时间戳
@@ -45,7 +46,7 @@ docs/                           项目与发布文档
 
 | 构建模块 | 负责内容 | 主要依赖 |
 | --- | --- | --- |
-| `furina_protocol` | C 协议、视频策略与鼠标图案数据 | C 标准库 |
+| `furina_protocol` | C 协议、配对握手、视频策略与鼠标图案数据 | C 标准库、Monocypher |
 | `furina_diagnostics` | 日志格式与中英参数转换 | Qt Core |
 | `furina_transport` | 认证连接、设备发现、鼠标通道 | 协议、Qt Network / Gui |
 | `furina_widgets` | 共用控件、主题与全屏显示 | 协议、日志、Qt Widgets |

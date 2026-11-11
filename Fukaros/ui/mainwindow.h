@@ -82,6 +82,9 @@ class MainWindow : public QMainWindow {
     void loadSettings();
     void saveSettings();
     void openSettings();
+    void showPairingTools();
+    void newPairingCode();
+    void showPairingQr();
     void configureAdb();
     void start();
     void stop();

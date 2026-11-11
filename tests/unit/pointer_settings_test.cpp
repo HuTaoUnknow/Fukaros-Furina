@@ -29,8 +29,8 @@ class PointerTest : public QObject {
         a.setValue(2);
         QTest::qWait(3);
         b.setValue(1.5);
-        QVERIFY(server.listen(29893, "pointer-code", "127.0.0.1"));
-        client.connectTo("127.0.0.1", 29893, "pointer-code");
+        QVERIFY(server.listen(29893, "ABCD-EFGH-JKLM-NPQR-ST23", "127.0.0.1"));
+        client.connectTo("127.0.0.1", 29893, "ABCD-EFGH-JKLM-NPQR-ST23");
         QTRY_VERIFY(client.ready());
         QTRY_COMPARE(a.value(), 1.5);
         mapA.setChecked(false);

@@ -6,6 +6,8 @@
 extern "C" {
 #endif
 #define FR_HEADER_SIZE 12
+/* Frame headers stay at version byte 1. Wire version 2 (FUR2) wraps them. */
+#define FR_FRAME_VERSION 1
 #define FR_MAX_PAYLOAD (8u * 1024u * 1024u)
 
 enum fr_type {
