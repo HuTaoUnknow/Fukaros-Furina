@@ -1,8 +1,8 @@
 # Fukaros + Furina v0.5.0
 
-日期：2026-11-11。CMake 工程版本为 **0.5.0**（仓库根目录、Fukaros、Furina 的 `project()`）。这次有意改变线路，0.4.x 对端会被拒绝，没有明文或 HMAC 回退。
+日期：2026-11-17。CMake 工程版本为 **0.5.0**（仓库根目录、Fukaros、Furina 的 `project()`）。这次有意改变线路，0.4.x 对端会被拒绝，没有明文或 HMAC 回退。
 
-还没有新的 Windows 安装包和 Android APK。安装脚本和 Android `versionName` 仍写着 0.4.20。已发布的安装包仍是 [v0.4.20](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.4.20)。
+安装包见 [v0.5.0](https://github.com/HuTaoUnknow/Fukaros-Furina/releases/tag/v0.5.0)：`Fukaros-0.5.0-windows-x64-setup.exe` 与 `Furina-0.5.0-android-arm64.apk`（Android `versionCode` 24、`versionName` 0.5.0，用与 0.4.x 相同的证书签名，可直接覆盖升级）。两端必须同时升级，0.4.x 与本版不能互连。
 
 ## 加密信道
 
@@ -76,4 +76,6 @@
 ## 没有在硬件上运行
 
 - 没有 Windows 机器，没有安装或测试 IDD 虚拟显示驱动，没有跑 NVENC。
-- 没有制作安装包，也没有核对 DPAPI 和 Android Keystore 的实机读写。
+- 没有核对 DPAPI 和 Android Keystore 的实机读写。
+
+Windows 安装包和 Android APK 已于 2026-11-17 制作，见本页开头。
