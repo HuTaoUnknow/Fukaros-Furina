@@ -56,7 +56,7 @@
             <item>
              <widget class="QLineEdit" name="token">
               <property name="placeholderText">
-               <string>至少 12 位，含字母和数字</string>
+               <string>至少 6 位，可用字母和数字</string>
               </property>
               <property name="maxLength">
                <number>64</number>
@@ -106,11 +106,11 @@
                 </property>
                 <property name="steps" stdset="0">
                  <string>1. 平板打开 Furina，查看配对码，或用相机扫描本页二维码。
-2. 手动配对码至少 12 位，只能使用字母 A–Z（不含 I、O）和数字 2–9，并且同时包含字母和数字。
-3. 不能是同一个字符重复，也不能包含 ABCD、2345 这类简单序列。
+2. 手动配对码至少 6 位，只能使用英文字母和数字，两端填写完全相同的码。
+3. 不能是同一个字符重复。
 4. 二维码约 2 分钟有效，只能使用一次。需要新的二维码时再点一次按钮。
 5. 手动配对仍由平板按开始，电脑再连接。
-EN: Manual codes are at least 12 characters from A-Z (no I or O) and digits 2-9, with both a letter and a digit. The PC shows a one-time QR code; the tablet scans it with the camera.</string>
+EN: Manual codes are at least 6 letters or digits, identical on both devices, and cannot be one repeated character. The PC shows a one-time QR code; the tablet scans it with the camera.</string>
                 </property>
                </widget>
               </item>
@@ -125,6 +125,16 @@ EN: Manual codes are at least 12 characters from A-Z (no I or O) and digits 2-9,
             </property>
             <property name="wordWrap">
              <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="pairingState">
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string/>
             </property>
            </widget>
           </item>
@@ -147,6 +157,13 @@ EN: Manual codes are at least 12 characters from A-Z (no I or O) and digits 2-9,
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QPushButton" name="pairCode">
+              <property name="text">
+               <string>配对码匹配</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>
@@ -165,7 +182,7 @@ EN: Manual codes are at least 12 characters from A-Z (no I or O) and digits 2-9,
              <bool>true</bool>
             </property>
             <property name="text">
-             <string>二维码由本机显示，平板用相机扫描。约 2 分钟内有效，只能使用一次。</string>
+             <string>二维码由本机显示，平板用相机扫描。约 2 分钟内有效，只能使用一次。配对成功后两端都会保存安全密钥，回首页按开始即可连接。</string>
             </property>
            </widget>
           </item>

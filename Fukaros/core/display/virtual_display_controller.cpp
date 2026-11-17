@@ -137,8 +137,11 @@ void VirtualDisplayController::ensure(bool portrait) {
 void VirtualDisplayController::acquire() {
     const long result = fr_virtual_acquire_oriented(&m_display, m_portrait);
     if (result) {
-        fail("创建扩展桌面失败，错误：" + QString::number(result),
-             "Creating the extended desktop failed. Error: " + QString::number(result));
+        char diagnosis[256]{};
+        fr_virtual_diagnose(diagnosis, sizeof(diagnosis));
+        fail("创建扩展桌面失败，错误：" + QString::number(result) + "（" + QString::fromUtf8(diagnosis) + "）",
+             "Creating the extended desktop failed. Error: " + QString::number(result) + " (" +
+                 QString::fromUtf8(diagnosis) + ")");
         return;
     }
     emit status(m_portrait ? "正在启用竖屏扩展桌面：1200×1920，刷新率 60 赫兹。"

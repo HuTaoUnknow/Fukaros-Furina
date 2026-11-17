@@ -14,6 +14,10 @@
 #include <QTabWidget>
 #include <QTabBar>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QEvent>
+
+#include <QBoxLayout>
 
 namespace {
 QWidget* helpHost(QWidget* button) {
@@ -204,6 +208,53 @@ bool StepHelpButton::eventFilter(QObject* watched, QEvent* event) {
             hideHelp();
     }
     return QPushButton::eventFilter(watched, event);
+}
+
+namespace {
+void orderCancelThenSave(QDialogButtonBox* box) {
+    auto* save = box->button(QDialogButtonBox::Save);
+    auto* cancel = box->button(QDialogButtonBox::Cancel);
+    auto* row = qobject_cast<QBoxLayout*>(box->layout());
+    if (!save || !cancel || !row)
+        return;
+    row->removeWidget(save);
+    row->removeWidget(cancel);
+    row->addStretch(1);
+    row->addWidget(cancel);
+    row->addWidget(save);
+}
+
+// QDialogButtonBox builds its layout from button roles, and rebuilds it when the
+// dialog is first shown. Reordering afterwards is what sticks, so it is applied
+// again on every show of the settings dialog.
+class SaveOrderOnShow : public QObject {
+  public:
+    explicit SaveOrderOnShow(QDialogButtonBox* box) : QObject(box), m_box(box) {}
+
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched == m_box && event->type() == QEvent::Show)
+            orderCancelThenSave(m_box);
+        return false;
+    }
+
+  private:
+    QDialogButtonBox* m_box;
+};
+} // namespace
+
+void furinaOrderDialogSaveButton(QWidget* holder) {
+    auto* box = holder->findChild<QDialogButtonBox*>("buttonBox");
+    if (!box)
+        return;
+    auto* save = box->button(QDialogButtonBox::Save);
+    auto* cancel = box->button(QDialogButtonBox::Cancel);
+    if (!save || !cancel)
+        return;
+    save->setText("保存");
+    cancel->setText("取消");
+    orderCancelThenSave(box);
+    box->installEventFilter(new SaveOrderOnShow(box));
 }
 
 void furinaConfigureSettingsScroll(QScrollArea* scroll) {

@@ -31,21 +31,34 @@ void MainWindow::start() {
         requestDirection();
         return;
     }
-    PairingCredential credential;
-    credential.kind = PairingSecretKind::ManualCode;
-    credential.secret = pairingNormalizeManualCode(cfg->token->text());
-    const auto code = pairingCheckManualCode(credential.secret);
-    if (!code.ok) {
-        log(code.chinese, code.english);
+    // Start only connects to a device that already shares a long-term key.
+    // Pairing is a separate, explicit step in Settings.
+    if (!pairingStoredKeyAvailable(m_peer)) {
+        log(kNoPairingKey, kNoPairingKeyEn);
         openSettings();
         return;
     }
     if (!m_listening) {
-        const auto bind = cfg->connectionTabs->currentIndex() == 0 ? QString("0.0.0.0") : cfg->host->text();
-        m_listening = pairingListen(m_peer, 27183, credential, bind);
+        // A specific address is tried first; if it cannot be bound we say so and fall
+        // back to the wildcard explicitly. Peer itself never falls back silently.
+        QString bind = QStringLiteral("0.0.0.0");
+        if (cfg->connectionTabs->currentIndex() != 0) {
+            const auto configured = cfg->host->text().trimmed();
+            if (!configured.isEmpty() && sessionListen(m_peer, 27183, configured)) {
+                bind = configured;
+                m_listening = true;
+            } else if (!configured.isEmpty()) {
+                log(QString("无法在 %1 上监听，改用 0.0.0.0。").arg(configured),
+                    QString("Could not listen on %1. Falling back to 0.0.0.0.").arg(configured));
+            }
+        }
+        if (!m_listening)
+            m_listening = sessionListen(m_peer, 27183, bind);
         if (!m_listening)
             return;
-        if (!m_discovery.start(bind))
+        // Subnet broadcasts only reach a wildcard-bound socket, so the responder
+        // always binds 0.0.0.0 even when the listener uses a specific address.
+        if (!m_discovery.start("0.0.0.0"))
             log("自动发现不可用，请在电脑手填平板 USB IP。",
                 "Discovery is unavailable. Enter the tablet USB IP on the PC.");
         refreshAddresses();
@@ -58,6 +71,9 @@ void MainWindow::start() {
 }
 
 void MainWindow::stop() {
+    // A stop from the home page must also drop the matching listener, otherwise the
+    // settings button keeps saying 监听中 with nothing behind it.
+    endPairMatch();
     m_presentationSync->reset();
     m_android.keepSession(false);
     m_android.setExtensionOrientation(-1);
@@ -78,6 +94,7 @@ void MainWindow::stop() {
     m_videoReceiver.reset();
     m_presentation->setActive(false);
     m_view->setImage({});
+    m_pairingOnly = false;
     furinaSetMaximizeIcon(ui->maximize, false);
 }
 
@@ -247,6 +264,28 @@ void MainWindow::connectTransportEvents() {
             m_android.key(key);
     });
     connect(&m_peer, &Peer::connected, this, [this] {
+        if (m_pairMatch) {
+            // This link was made with the pairing code, so it is the match. The port
+            // stays open for the rest of the settings session: later links use the
+            // minted long-term key wiped by stop(), which keeps the code an
+            // identifier and lets the update below follow an address change.
+            m_pairPeerIp = m_peer.remoteAddress().toString();
+            updatePairingHint();
+            log(QString("配对码匹配成功，已与 %1 配对。").arg(m_pairPeerIp),
+                QString("Pairing-code match succeeded with %1.").arg(m_pairPeerIp));
+            return;
+        }
+        if (m_pairingOnly) {
+            // Pairing only mints and stores the key. Casting starts from the home page.
+            m_pairingOnly = false;
+            m_pending = false;
+            m_listening = false;
+            m_discovery.stop();
+            log("配对成功，安全密钥已保存。请在首页按开始。",
+                "Paired. The secure key is saved. Press Start on the home page.");
+            m_peer.close();
+            return;
+        }
         m_peer.sendStatus(furinaStatus("平板已连接，设备码：" + cfg->serial->text(),
                                        "Tablet connected, device code: " + cfg->serial->text()));
         // The PC initiates a direction immediately. If it doesn't, honour a pending tablet Start.
@@ -302,13 +341,15 @@ void MainWindow::pairFromQrPayload(const QString& payload) {
         return;
     }
     auto& store = SecretStore::instance();
+    // Pin before consuming: a pinned mismatch must not burn the one-time secret,
+    // otherwise the user has to regenerate the code on the PC for nothing.
     if (!pairingPinPublicKey(store, decoded.payload.host, decoded.payload.fingerprint)) {
         log("桌面公钥指纹与已固定的不一致。",
             "Desktop public key fingerprint does not match the pinned key.");
         return;
     }
     if (!pairingConsumeOneTimeSecret(store, decoded.payload.secret, decoded.payload.expiry, now)) {
-        log("二维码已使用。", "QR code was already used.");
+        log("二维码已使用或已过期。", "QR code was already used or has expired.");
         return;
     }
     PairingCredential credential;
@@ -322,6 +363,8 @@ void MainWindow::pairFromQrPayload(const QString& payload) {
     }
     m_listening = false;
     m_pending = true;
-    m_castUi->lockPending();
-    log("已固定桌面公钥指纹，正在连接电脑。", "Pinned the desktop public key. Connecting to the PC.");
+    // A QR scan pairs; it does not start casting. Peer::connected closes the link.
+    m_pairingOnly = true;
+    log(QString("正在连接电脑 %1:%2。").arg(decoded.payload.host).arg(decoded.payload.port),
+        QString("Connecting to the PC at %1:%2.").arg(decoded.payload.host).arg(decoded.payload.port));
 }

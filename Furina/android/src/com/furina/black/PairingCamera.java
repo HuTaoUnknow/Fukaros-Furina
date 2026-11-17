@@ -17,6 +17,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.hardware.display.DisplayManager;
 import android.media.Image;
 import android.media.ImageReader;
+import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -50,7 +51,12 @@ public final class PairingCamera {
     private static int bufferHeight = 720;
     private static int loggedDisplay = Integer.MIN_VALUE;
     private static int loggedUpright = Integer.MIN_VALUE;
+    private static int loggedViewW = Integer.MIN_VALUE;
+    private static int loggedViewH = Integer.MIN_VALUE;
+    private static int loggedHal = Integer.MIN_VALUE;
     private static boolean loggedFrame;
+    private static long lastDecodeMs;
+    private static final long DECODE_INTERVAL_MS = 120;
     private static DisplayManager displayManager;
     private static DisplayManager.DisplayListener displayListener;
 
@@ -63,10 +69,36 @@ public final class PairingCamera {
 
     public static native void nativeFinished(String text);
 
-    public static void start() {
+    /** Asks the activity for CAMERA, then opens the scanner once it is granted. */
+    public static void requestStart() {
         final FurinaActivity activity = FurinaActivity.currentActivity();
         if (activity == null) {
             Log.i(TAG, "camera start without activity");
+            nativeFinished("");
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            if (activity.checkSelfPermission(Manifest.permission.CAMERA)
+                    == PackageManager.PERMISSION_GRANTED) {
+                Log.i(TAG, "camera permission granted");
+                open(activity);
+                return;
+            }
+            Log.i(TAG, "camera permission requesting");
+            activity.requestCameraPermission();
+        });
+    }
+
+    /** Called by the activity after the system permission dialog is answered. */
+    public static void onPermissionResult(boolean granted) {
+        if (!granted) {
+            Log.i(TAG, "camera permission denied");
+            nativeFinished("");
+            return;
+        }
+        Log.i(TAG, "camera permission granted");
+        final FurinaActivity activity = FurinaActivity.currentActivity();
+        if (activity == null) {
             nativeFinished("");
             return;
         }
@@ -77,8 +109,12 @@ public final class PairingCamera {
         stop();
         delivered = false;
         loggedFrame = false;
+        lastDecodeMs = 0;
         loggedDisplay = Integer.MIN_VALUE;
         loggedUpright = Integer.MIN_VALUE;
+        loggedViewW = Integer.MIN_VALUE;
+        loggedViewH = Integer.MIN_VALUE;
+        loggedHal = Integer.MIN_VALUE;
         if (activity.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             Log.i(TAG, "camera permission missing");
             nativeFinished("");
@@ -100,6 +136,13 @@ public final class PairingCamera {
                            + sensorOrientation + " buffer=" + bufferWidth + "x" + bufferHeight + " focus="
                            + (continuousFocus ? "continuous" : "default"));
         preview = new TextureView(activity);
+        // A rotation re-lays out the overlay without changing the display rotation we
+        // last saw, so the transform has to follow the view size as well.
+        preview.addOnLayoutChangeListener(
+                (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                    if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop)
+                        applyPreviewTransform();
+                });
         Button cancel = new Button(activity);
         cancel.setText("取消");
         cancel.setOnClickListener(view -> finish(""));
@@ -141,6 +184,11 @@ public final class PairingCamera {
                 surface.setDefaultBufferSize(bufferWidth, bufferHeight);
                 applyPreviewTransform();
                 openCamera(activity, preview);
+                // halQuarterTurns() reads the SurfaceTexture transform, which only carries
+                // the HAL's mapping once frames flow. Re-apply it after the first frames so
+                // the preview is corrected even though the initial pass saw a fresh surface.
+                final Handler main = new Handler(activity.getMainLooper());
+                main.postDelayed(PairingCamera::applyPreviewTransform, 1500);
             }
 
             @Override
@@ -234,8 +282,13 @@ public final class PairingCamera {
     private static int displayDegrees(FurinaActivity activity) {
         if (activity == null)
             return 0;
-        DisplayManager manager = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
-        Display display = manager == null ? null : manager.getDisplay(Display.DEFAULT_DISPLAY);
+        Display display = null;
+        if (Build.VERSION.SDK_INT >= 30)
+            display = activity.getDisplay();
+        if (display == null) {
+            DisplayManager manager = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
+            display = manager == null ? null : manager.getDisplay(Display.DEFAULT_DISPLAY);
+        }
         if (display == null)
             return 0;
         switch (display.getRotation()) {
@@ -250,6 +303,42 @@ public final class PairingCamera {
         }
     }
 
+    /**
+     * Quarter turns (clockwise) that the camera HAL's SurfaceTexture transform already applies.
+     *
+     * TextureView multiplies its own matrix by the SurfaceTexture transform, so a HAL matrix
+     * that swaps the axes turns the preview on its own before our matrix runs. Measured on the
+     * Xiaomi tablet: the HAL matrix is a fixed transpose regardless of display rotation, which
+     * added exactly 90 degrees to whatever we asked for.
+     *
+     * The HAL matrix is expressed in texture (u,v) space, where v grows upward, so its 2x2
+     * part has to be read with that sign flip in mind.
+     */
+    private static int halQuarterTurns() {
+        TextureView view = preview;
+        if (view == null)
+            return 0;
+        SurfaceTexture surface = view.getSurfaceTexture();
+        if (surface == null)
+            return 0;
+        float[] st = new float[16];
+        surface.getTransformMatrix(st);
+        // st is column-major: u' = st[0]*u + st[4]*v + st[12], v' = st[1]*u + st[5]*v + st[13].
+        // Convert to screen axes by negating the v row (flip y), then read off the rotation.
+        float m00 = st[0], m01 = st[4], m10 = -st[1], m11 = -st[5];
+        // A pure quarter turn has one of four shapes; classify by the dominant axis mapping.
+        if (Math.abs(m00) < 0.5f && Math.abs(m01) > 0.5f) {
+            // x comes from v: a quarter turn. m01 is -sin(theta), so a negative m01
+            // means +90 and a positive one means 270.
+            return m01 < 0 ? 90 : 270;
+        }
+        if (Math.abs(m00) > 0.5f && Math.abs(m01) < 0.5f) {
+            // No axis swap; 0 or 180 depending on the sign of the x mapping.
+            return m00 > 0 ? 0 : 180;
+        }
+        return 0;
+    }
+
     private static void applyPreviewTransform() {
         TextureView view = preview;
         FurinaActivity activity = FurinaActivity.currentActivity();
@@ -260,28 +349,43 @@ public final class PairingCamera {
         if (viewW < 1 || viewH < 1)
             return;
         int display = displayDegrees(activity);
-        int upright = nativeUprightDegrees(sensorOrientation, display, frontFacing);
-        // The TextureView already stretches the buffer to fill the view. Restore the
-        // buffer aspect around the center, rotate it upright, then center-crop.
-        float cx = viewW / 2f;
-        float cy = viewH / 2f;
-        Matrix matrix = new Matrix();
-        matrix.postScale(bufferWidth / (float) viewW, bufferHeight / (float) viewH, cx, cy);
-        matrix.postRotate(upright, cx, cy);
-        boolean swap = upright == 90 || upright == 270;
+        int upright = ((nativeUprightDegrees(sensorOrientation, display, frontFacing) % 360) + 360) % 360;
+        // TextureView composes its matrix with the SurfaceTexture's transform, and this
+        // camera HAL ships a non-identity one. Apply only the remainder, or the preview
+        // ends up a quarter turn off (measured: 180 deg on screen when 90 was asked for).
+        final int halTurns = halQuarterTurns();
+        final int applied = ((upright - halTurns) % 360 + 360) % 360;
+        // setTransform works in view coordinates, not buffer coordinates: TextureView
+        // already stretches the buffer to fill the view. So the first thing this matrix
+        // has to undo is that implicit non-uniform stretch, otherwise the rotation below
+        // is applied to a skewed image and the result lands outside the view.
+        // The extent that has to cover the view is the buffer rotated by what we actually apply,
+        // not by upright: the HAL has already turned the image, so the two differ by a quarter
+        // turn and scaling for the wrong one leaves bars along one axis in landscape.
+        final int appliedMod = ((applied % 360) + 360) % 360;
+        boolean swap = appliedMod == 90 || appliedMod == 270;
         float rotatedW = swap ? bufferHeight : bufferWidth;
         float rotatedH = swap ? bufferWidth : bufferHeight;
         float cover = Math.max(viewW / rotatedW, viewH / rotatedH);
-        matrix.postScale(cover, cover, cx, cy);
-        if (frontFacing)
-            matrix.postScale(-1f, 1f, cx, cy);
+        Matrix matrix = new Matrix();
+        matrix.postScale(bufferWidth / (float) viewW, bufferHeight / (float) viewH);
+        matrix.postTranslate(-bufferWidth / 2f, -bufferHeight / 2f);
+        matrix.postRotate(applied);
+        // Undo the mirroring when the front camera is used, before scaling up.
+        matrix.postScale(frontFacing ? -cover : cover, cover);
+        matrix.postTranslate(viewW / 2f, viewH / 2f);
         view.setTransform(matrix);
-        if (display != loggedDisplay || upright != loggedUpright) {
+        if (display != loggedDisplay || upright != loggedUpright || viewW != loggedViewW || viewH != loggedViewH
+                || halTurns != loggedHal) {
             loggedDisplay = display;
             loggedUpright = upright;
+            loggedViewW = viewW;
+            loggedViewH = viewH;
+            loggedHal = halTurns;
             Log.i(TAG, "preview display=ROTATION_" + display + " sensor=" + sensorOrientation + " upright=" + upright
-                               + " buffer=" + bufferWidth + "x" + bufferHeight + " view=" + viewW + "x" + viewH
-                               + " facing=" + (frontFacing ? "front" : "back"));
+                               + " hal=" + halTurns + " applied=" + applied + " buffer=" + bufferWidth + "x"
+                               + bufferHeight + " view=" + viewW + "x" + viewH + " cover=" + cover + " facing="
+                               + (frontFacing ? "front" : "back"));
         }
     }
 
@@ -357,6 +461,12 @@ public final class PairingCamera {
         try (Image image = imageReader.acquireLatestImage()) {
             if (image == null)
                 return;
+            // Decoding every frame on the camera thread starves the preview and the
+            // decoder alike. A few frames per second is plenty for a static code.
+            long now = System.currentTimeMillis();
+            if (now - lastDecodeMs < DECODE_INTERVAL_MS)
+                return;
+            lastDecodeMs = now;
             Image.Plane plane = image.getPlanes()[0];
             ByteBuffer buffer = plane.getBuffer().duplicate();
             buffer.rewind();
@@ -377,7 +487,6 @@ public final class PairingCamera {
                 finish(text);
         } catch (RuntimeException e) {
             Log.i(TAG, "frame failed " + e);
-            finish("");
         }
     }
 

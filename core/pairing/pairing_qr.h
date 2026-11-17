@@ -20,3 +20,8 @@ QImage pairingExtractLuma(const uchar* data, int length, int width, int height, 
 
 // Clockwise rotation by 0, 90, 180, or 270 degrees.
 QImage pairingRotateClockwise(const QImage& image, int degrees);
+
+// Reads a QR from a raw camera frame. The preferred angle is tried first; the
+// three quarter turns follow, because camera vendors disagree about whether the
+// buffer is already upright when the display is rotated.
+QStringList pairingReadQrFrame(const QImage& sensorFrame, int uprightDegrees);

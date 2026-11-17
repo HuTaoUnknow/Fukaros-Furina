@@ -2,8 +2,12 @@
 #include <QIconEngine>
 #include <QPainter>
 #include <QPainterPath>
+#include <utility>
 
 namespace {
+// Mirrors kNoPairingKey in pairing_session.h. Duplicated rather than included so the
+// session widget layer keeps its distance from the secret store module.
+constexpr auto kNeedsPairing = "请先在设置中完成配对";
 class CastIcon final : public QIconEngine {
   public:
     CastIcon(CastControl::State state, int angle) : m_state(state), m_angle(angle) {}
@@ -56,8 +60,9 @@ class CastIcon final : public QIconEngine {
 };
 } // namespace
 
-CastControl::CastControl(QWidget* window, CastUiState* casting, Peer* peer)
-    : QObject(window), m_button(window->findChild<QPushButton*>("start")), m_casting(casting), m_peer(peer) {
+CastControl::CastControl(QWidget* window, CastUiState* casting, Peer* peer, HasKey hasKey)
+    : QObject(window), m_button(window->findChild<QPushButton*>("start")), m_casting(casting),
+      m_peer(peer), m_hasKey(std::move(hasKey)) {
     m_button->setText({});
     m_button->setIconSize(QSize(22, 22));
     m_animation.setInterval(50);
@@ -81,12 +86,19 @@ void CastControl::refresh() {
     // A paired transport may remain connected after cancellation or rejection.
     // Only an occupied casting session shows Stop; pending consent shows Waiting.
     m_state = m_casting->occupied() ? Stop : m_casting->locked() ? Waiting : Start;
-    const QString label = m_state == Start     ? QStringLiteral("开始")
+    // Without a shared key the home button cannot connect: pairing lives in Settings.
+    m_unpaired = m_state == Start && m_hasKey && !m_hasKey();
+    const QString label = m_unpaired  ? QString::fromUtf8(kNeedsPairing)
+                          : m_state == Start     ? QStringLiteral("开始")
                           : m_state == Waiting ? QStringLiteral("等待（点击取消）")
                                                : QStringLiteral("停止");
+    m_button->setEnabled(!m_unpaired);
     m_button->setToolTip(label);
     m_button->setAccessibleName(label);
-    m_button->setProperty("castState", m_state == Start ? "start" : m_state == Waiting ? "waiting" : "stop");
+    m_button->setProperty("castState", m_unpaired  ? "unpaired"
+                                        : m_state == Start ? "start"
+                                        : m_state == Waiting ? "waiting"
+                                                             : "stop");
     if (m_state == Waiting) {
         if (!m_animation.isActive()) {
             m_angle = 0;

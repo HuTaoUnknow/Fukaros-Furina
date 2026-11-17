@@ -61,7 +61,12 @@ class MainWindow : public QMainWindow {
     QRect m_nativeRect;
     bool m_nativeVisible = false, m_nativeFull = false;
     bool m_sharing = false, m_listening = false, m_pending = false, m_sessionActive = false,
-         m_remoteMax = false;
+         m_remoteMax = false, m_pairingOnly = false;
+    // Pairing-code matching runs until the settings dialog closes: the tablet keeps
+    // the port open and answers probes while waiting, then reports who it matched.
+    bool m_pairMatch = false;
+    QString m_pairCode;
+    QString m_pairPeerIp;
     void log(const QString& message, const QString& english = {});
     void loadSettings();
     void saveSettings();
@@ -69,6 +74,9 @@ class MainWindow : public QMainWindow {
     void bindPairingUi();
     void refreshPairingHint();
     void scanPairingQr();
+    void beginPairMatch();
+    void endPairMatch();
+    void updatePairingHint();
     void pairFromQrPayload(const QString& payload);
     void refreshAddresses();
     void start();

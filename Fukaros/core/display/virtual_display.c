@@ -312,6 +312,36 @@ long fr_virtual_release(fr_virtual_display* d) {
     return result;
 }
 
+int fr_virtual_diagnose(char* text, unsigned size) {
+    DISPLAY_DEVICEW device;
+    DISPLAYCONFIG_PATH_INFO* paths = NULL;
+    DISPLAYCONFIG_MODE_INFO* modes = NULL;
+    UINT32 count = 0, mode_count = 0, i;
+    char name[64] = "";
+    int active = 0;
+    if (!text || size < 2)
+        return 0;
+    memset(&device, 0, sizeof(device));
+    device.cb = sizeof(device);
+    /* ATTACHED_TO_DESKTOP is the flag Windows Display Settings shows as an
+     * extension; a stale target left by an earlier crash carries it too. */
+    const int attached = find_virtual(&device) &&
+                         (device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0;
+    if (attached)
+        WideCharToMultiByte(CP_UTF8, 0, device.DeviceName, -1, name, sizeof(name), NULL, NULL);
+    if (!query_paths(&paths, &count, &modes, &mode_count)) {
+        for (i = 0; i < count; i++)
+            if (paths[i].flags & DISPLAYCONFIG_PATH_ACTIVE)
+                ++active;
+        free(paths);
+        free(modes);
+    }
+    _snprintf(text, size, "active=%d attached=%d device=%s paths=%u modes=%u", active, attached,
+              name[0] ? name : "-", count, mode_count);
+    text[size - 1] = 0;
+    return 1;
+}
+
 long fr_virtual_get_position(const fr_virtual_display* d, long* x, long* y) {
     DISPLAY_DEVICEW device;
     DEVMODEW mode = {0};
@@ -439,5 +469,12 @@ long fr_virtual_set_position(fr_virtual_display* d, long x, long y) {
     (void)x;
     (void)y;
     return 50;
+}
+
+int fr_virtual_diagnose(char* text, unsigned size) {
+    (void)size;
+    if (text)
+        text[0] = 0;
+    return 0;
 }
 #endif

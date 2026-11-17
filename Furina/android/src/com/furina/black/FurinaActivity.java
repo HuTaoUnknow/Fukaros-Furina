@@ -20,6 +20,7 @@ public class FurinaActivity extends QtActivity {
     private boolean extensionOrientationLocked;
     private int previousRequestedOrientation;
     private static final int CAPTURE_REQUEST = 8301;
+    private static final int CAMERA_PERMISSION_REQUEST = 8302;
     private OnBackInvokedCallback backCallback;
     public static native boolean nativeWantFrame();
     public static native void nativeFrame(byte[] jpeg);
@@ -35,6 +36,20 @@ public class FurinaActivity extends QtActivity {
 
     public static FurinaActivity currentActivity() {
         return current;
+    }
+
+    public void requestCameraPermission() {
+        requestPermissions(new String[] {android.Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request != CAMERA_PERMISSION_REQUEST)
+            return;
+        boolean granted = results != null && results.length > 0
+                          && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        PairingCamera.onPermissionResult(granted);
     }
 
     @Override

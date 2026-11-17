@@ -20,7 +20,22 @@
 #include "desktop_tray.h"
 #include <QRegularExpression>
 #include "mainwindow.h"
+#include "secret_store.h"
 Q_DECLARE_METATYPE(fr_gesture)
+
+// Home Start now requires a shared long-term key. Injecting it keeps these cases
+// off the platform secret store, which some CI accounts cannot write to.
+static const QByteArray kTestKey(32, 'T');
+static void pairPeer(Peer& peer) {
+    peer.setLongTermKey(kTestKey);
+}
+
+// CastControl only watches Peer signals, so a key injected after construction
+// needs an explicit re-evaluation before the Start button becomes clickable.
+static void pairWindow(QWidget& window) {
+    pairPeer(*window.findChild<Peer*>());
+    window.findChild<CastControl*>()->refresh();
+}
 
 static bool actionSeen(const QSignalSpy& spy, quint32 action) {
     for (const auto& row : spy)
@@ -83,6 +98,8 @@ class UiTest : public QObject {
         auto* maximize = w.findChild<QPushButton*>("maximize");
         Peer other;
         QSignalSpy actions(&other, &Peer::session);
+        pairWindow(w);
+        pairPeer(other);
         QVERIFY(other.listen(29910, "fullscreen-state-code", "127.0.0.1"));
         peer->connectTo("127.0.0.1", 29910, "fullscreen-state-code");
         QTRY_VERIFY(peer->ready() && other.ready());
@@ -210,10 +227,12 @@ class UiTest : public QObject {
         DisplaySettingsProbe probe;
         QDesktopServices::setUrlHandler("ms-settings", &probe, "open");
         Peer server;
+        pairPeer(server);
         QVERIFY(server.listen(27183, "H3R8K2M7Q4P9", "127.0.0.2"));
         QSignalSpy approvals(&server, &Peer::approval), video(&server, &Peer::video);
         MainWindow window;
         window.show();
+        pairWindow(window);
         window.findChild<QLineEdit*>("host")->setText("127.0.0.2");
         window.findChild<QLineEdit*>("token")->setText("H3R8K2M7Q4P9");
         window.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
@@ -304,6 +323,7 @@ class UiTest : public QObject {
 
     void usbNetworkDoesNotStartAdb() {
         MainWindow w;
+        pairWindow(w);
         w.findChild<QLineEdit*>("token")->setText("M4Q8R2K7P3N9");
         w.findChild<QLineEdit*>("adbPath")->setText("missing-adb.exe");
         w.findChild<QComboBox*>("usbMode")->setCurrentIndex(0);
@@ -346,6 +366,8 @@ class UiTest : public QObject {
         auto* view = w.findChild<ScreenView*>();
         Peer other;
         QSignalSpy approvals(&other, &Peer::approval);
+        pairWindow(w);
+        pairPeer(other);
         QVERIFY(other.listen(29903, "stop-sync-code"));
         peer->connectTo("127.0.0.1", 29903, "stop-sync-code");
         QTRY_VERIFY(peer->ready() && other.ready());
@@ -498,10 +520,13 @@ class UiTest : public QObject {
         QVERIFY(tray && tray->available());
         // USB forwarding can already own 127.0.0.1:27183 on the developer PC.
         Peer server;
+        pairPeer(server);
+        pairWindow(w);
         QVERIFY(server.listen(27183, "P9K2N7R4Q8M3", "127.0.0.2"));
         QSignalSpy approvals(&server, &Peer::approval);
         w.findChild<QLineEdit*>("host")->setText("127.0.0.2");
         w.findChild<QLineEdit*>("token")->setText("P9K2N7R4Q8M3");
+        pairWindow(w);
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         w.findChild<QCheckBox*>("receive")->click();
         auto* start = w.findChild<QPushButton*>("start");
@@ -542,9 +567,78 @@ class UiTest : public QObject {
         QVERIFY(!state->locked());
     }
 
+    void startRequiresAPairedKey() {
+        // A key saved by an earlier case or process would defeat the assertion.
+        SecretStore::instance().remove(QStringLiteral("channel-long-term-key"));
+        MainWindow w;
+        w.show();
+        auto* button = w.findChild<QPushButton*>("start");
+        auto* control = w.findChild<CastControl*>();
+        auto* host = w.findChild<QLineEdit*>("host");
+        auto* token = w.findChild<QLineEdit*>("token");
+        QVERIFY(button && control && host && token);
+        host->setText("127.0.0.2");
+        token->setText("K7R9M2Q4N8");
+        w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
+        QVERIFY(control->unpaired());
+        QVERIFY(!button->isEnabled());
+        QCOMPARE(button->property("castState").toString(), QString("unpaired"));
+        QCOMPARE(button->toolTip(), QString("请先在设置中完成配对"));
+        button->click();
+        QCOMPARE(control->state(), CastControl::Start);
+        QVERIFY(!w.findChild<Peer*>()->ready());
+    }
+
+    void settingsButtonOrderIsCancelThenSave() {
+        MainWindow w;
+        w.findChild<QPushButton*>("settings")->click();
+        auto* dialog = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(dialog->isVisible());
+        auto* box = w.findChild<QDialogButtonBox*>("buttonBox");
+        QVERIFY(box);
+        auto* cancel = box->button(QDialogButtonBox::Cancel);
+        auto* save = box->button(QDialogButtonBox::Save);
+        QCOMPARE(cancel->text(), QString::fromUtf8("取消"));
+        QCOMPARE(save->text(), QString::fromUtf8("保存"));
+        QTRY_VERIFY(cancel->isVisible() && save->isVisible());
+        const int cancelX = cancel->mapTo(box, QPoint()).x();
+        const int saveX = save->mapTo(box, QPoint()).x();
+        QVERIFY2(cancelX < saveX, qPrintable(QString("cancel x=%1 save x=%2").arg(cancelX).arg(saveX)));
+        dialog->reject();
+    }
+
+    void pairCodeButtonPairsAndSavesKey() {
+        MainWindow w;
+        w.show();
+        // Settings was saved by a previous case; a stale key would defeat the assertion.
+        SecretStore::instance().remove(QStringLiteral("channel-long-term-key"));
+        auto *token = w.findChild<QLineEdit*>("token"), *host = w.findChild<QLineEdit*>("host");
+        QVERIFY(token && host);
+        token->setText("R7T2M9K4Q8N3");
+        host->setText("127.0.0.2");
+        auto* pair = w.findChild<QPushButton*>("pairCode");
+        QVERIFY(pair);
+        pair->click();
+        auto* log = w.findChild<QPlainTextEdit*>("log");
+        QTRY_VERIFY2(log->toPlainText().contains("配对码匹配中"), qPrintable(log->toPlainText()));
+        // Matching is a long-running state: the button cannot be pressed again.
+        QVERIFY(!pair->isEnabled());
+        QCOMPARE(pair->text(), QString::fromUtf8("匹配中…"));
+        auto* state = w.findChild<QLabel*>("pairingState");
+        QVERIFY(state);
+        QVERIFY(!state->text().isEmpty());
+        // Without a handshake there is no key yet, so Start stays refused.
+        w.findChild<QPushButton*>("start")->click();
+        QVERIFY(!w.findChild<Peer*>()->ready());
+        QVERIFY(w.findChild<CastControl*>()->unpaired());
+        w.findChild<Peer*>()->close();
+        QTest::qWait(50);
+    }
+
     void singleControlCancelsWaiting() {
         MainWindow w;
         w.show();
+        pairWindow(w);
         auto* button = w.findChild<QPushButton*>("start");
         auto* control = w.findChild<CastControl*>();
         QVERIFY(button && control);
@@ -603,21 +697,30 @@ class UiTest : public QObject {
 
     void invalidConnectionReleasesPendingLock() {
         MainWindow w;
+        // Without a key the button would be greyed out and the test would pass for
+        // the wrong reason: this case is about an invalid IP, not about pairing.
+        pairWindow(w);
         w.findChild<QLineEdit*>("host")->setText("invalid-ip");
         w.findChild<QLineEdit*>("token")->setText("test-code");
         w.findChild<QTabWidget*>("transport")->setCurrentIndex(1);
         w.findChild<QPushButton*>("start")->click();
-        QVERIFY(!w.findChild<CastUiState*>()->locked());
+        // An unusable address now falls back to broadcasting, so the pending lock is
+        // held until that search finishes instead of being dropped immediately.
+        QCOMPARE(w.findChild<CastControl*>()->state(), CastControl::Waiting);
+        QTRY_VERIFY_WITH_TIMEOUT(!w.findChild<CastUiState*>()->locked(), 15000);
         QVERIFY(w.findChild<QCheckBox*>("share")->isEnabled());
         QVERIFY(w.findChild<QPushButton*>("start")->isEnabled());
+        QCOMPARE(w.findChild<CastControl*>()->state(), CastControl::Start);
     }
 
     void remoteScreenAndInput() {
         qRegisterMetaType<fr_gesture>();
         Peer server;
+        pairPeer(server);
         QVERIFY(server.listen(27183, "Q2M8K4R9N3P7"));
         MainWindow w;
         w.show();
+        pairWindow(w);
         auto* view = w.findChild<ScreenView*>();
         auto *mode = w.findChild<QCheckBox*>("extend"), *duplicate = w.findChild<QCheckBox*>("duplicate");
         QVERIFY(!w.findChild<QComboBox*>("castSource") && !w.findChild<QWidget*>("displayGroup"));
@@ -690,9 +793,13 @@ class UiTest : public QObject {
         QVERIFY(duplicate->isChecked() && !mode->isChecked());
         QVERIFY(server.ready() && consent->active());
         const auto profileCount = profiles.count();
-        w.findChild<QPushButton*>("resolution720")->click();
+        // The persisted value may already be 720. A checked button only toggles off,
+        // so pick a value that always differs from the current one.
+        const auto resolution = w.findChild<ResolutionChoice*>();
+        const int wanted = resolution->value() == 720 ? 1080 : 720;
+        w.findChild<QPushButton*>(QString("resolution%1").arg(wanted))->click();
         QTRY_VERIFY(profiles.count() > profileCount);
-        QCOMPARE(profiles.last()[0].toInt(), 720);
+        QCOMPARE(profiles.last()[0].toInt(), wanted);
         QVERIFY(server.ready() && state->occupied());
         w.findChild<QPushButton*>("settings")->click();
         QTRY_VERIFY(dialog->isVisible());
@@ -735,12 +842,24 @@ class UiTest : public QObject {
         QTRY_VERIFY(actionSeen(sessions, FR_MAXIMIZE));
         stop->click();
         QTRY_VERIFY(!server.ready());
+        // Extend works on machines with a virtual display driver and no second physical
+        // monitor: the host then has one screen and the cast adds a second. Without the
+        // driver there is only ever one screen, and the cast must say so.
+        const int physicalScreens = QGuiApplication::screens().size();
+        // The offscreen platform never attaches the driver's display: extend only works
+        // there when the platform itself offers a second screen.
+        const bool virtualDriver = fr_virtual_available() && QGuiApplication::platformName() != "offscreen";
         mode->setChecked(true);
         grant();
         if (qEnvironmentVariableIsSet("FURINA_TEST_MULTI_SCREEN")) {
             QCOMPARE(QGuiApplication::screens().size(), 3);
             QTRY_VERIFY(
                 w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("扩展投屏已启动：extended-test"));
+        } else if (virtualDriver) {
+            // The virtual display is attached, so the host gains a screen and the cast
+            // starts on it instead of reporting that extend is unavailable.
+            QTRY_COMPARE(QGuiApplication::screens().size(), physicalScreens + 1);
+            QTRY_VERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("扩展"));
         } else {
             QCOMPARE(QGuiApplication::screens().size(), 1);
             QTRY_VERIFY(w.findChild<QPlainTextEdit*>("log")->toPlainText().contains("扩展暂不可用"));

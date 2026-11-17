@@ -31,6 +31,8 @@ class Peer : public QObject {
     // 32-byte key from longTermKeyEstablished. Empty clears it. Later connections
     // authenticate with this key instead of token.
     void setLongTermKey(const QByteArray& key);
+    // The key used as the SPAKE2 password: preset or established. Empty when neither exists.
+    QByteArray longTermKey() const;
     QByteArray establishedLongTermKey() const;
 
     bool ready() const {
@@ -59,6 +61,9 @@ class Peer : public QObject {
     void sendFeedback(double fps, double workMs, unsigned queueMs, double displayedFps);
     unsigned videoQueueMs() const;
     QHostAddress boundAddress() const;
+    // Address of the connected peer, so a listener can show who it is paired with.
+    // Empty when no session is established.
+    QHostAddress remoteAddress() const;
     quint16 serverPort() const;
     QObject* mainTransport() const;
     int videoInFlight() const {
@@ -96,6 +101,7 @@ class Peer : public QObject {
     QByteArray m_longTermKey;
     QByteArray m_established;
     QHostAddress m_bound;
+    QHostAddress m_remote;
     quint16 m_port = 0;
     std::atomic<QTcpSocket*> m_mainSocket{nullptr};
     std::atomic<bool> m_ready{false};

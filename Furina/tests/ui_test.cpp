@@ -10,12 +10,27 @@
 #include <QDialogButtonBox>
 #include <QRegularExpression>
 #include <QFrame>
+#include <QLabel>
 #include <QScrollArea>
 #include <QScrollBar>
 #include "settings_support.h"
 #include <QNetworkDatagram>
 #include <QNetworkProxy>
 #include "mainwindow.h"
+
+// Home Start now requires a shared long-term key. Injecting it on both Peers
+// keeps these cases off the platform secret store.
+static const QByteArray kTestKey(32, 'T');
+static void pairPeer(Peer& peer) {
+    peer.setLongTermKey(kTestKey);
+}
+
+// CastControl only watches Peer signals, so a key injected after construction
+// needs an explicit re-evaluation before the Start button becomes clickable.
+static void pairWindow(QWidget& window) {
+    pairPeer(*window.findChild<Peer*>());
+    window.findChild<CastControl*>()->refresh();
+}
 
 static int requestCount(const QSignalSpy& spy) {
     int count = 0;
@@ -124,6 +139,8 @@ class UiTest : public QObject {
         auto* consent = w.findChild<SessionConsent*>();
         Peer other;
         QSignalSpy controls(&other, &Peer::session), status(bridge, &AndroidBridge::status);
+        pairPeer(other);
+        pairWindow(w);
         QVERIFY(other.listen(29909, "resume-session-code", "127.0.0.1"));
         peer->connectTo("127.0.0.1", 29909, "resume-session-code");
         QTRY_VERIFY(peer->ready() && other.ready());
@@ -205,8 +222,10 @@ class UiTest : public QObject {
         modes->click();
         // Approval stays accessible even when the log page is hidden.
         Peer other;
-        QVERIFY(other.listen(29905, "portrait-consent-code"));
         auto* peer = w.findChild<Peer*>();
+        pairPeer(other);
+        pairWindow(w);
+        QVERIFY(other.listen(29905, "portrait-consent-code"));
         peer->connectTo("127.0.0.1", 29905, "portrait-consent-code");
         QTRY_VERIFY(other.ready() && peer->ready());
         other.sendApproval(4501, FR_APPROVAL_REQUEST, FR_APPROVAL_SHARE);
@@ -260,6 +279,8 @@ class UiTest : public QObject {
         auto* peer = w.findChild<Peer*>();
         Peer other;
         QSignalSpy approvals(&other, &Peer::approval);
+        pairPeer(other);
+        pairWindow(w);
         QVERIFY(other.listen(29907, "extension-lock-code"));
         peer->connectTo("127.0.0.1", 29907, "extension-lock-code");
         QTRY_VERIFY(peer->ready() && other.ready());
@@ -323,6 +344,7 @@ class UiTest : public QObject {
 
     void usbServiceIncludesDiscovery() {
         MainWindow w;
+        pairWindow(w);
         w.findChild<QLineEdit*>("token")->setText("N7P3K9M2R8Q4");
         w.findChild<QTabWidget*>("connectionTabs")->setCurrentIndex(0);
         // A Wi-Fi-only bind address must not prevent the USB page from listening.
@@ -364,6 +386,8 @@ class UiTest : public QObject {
         auto* view = w.findChild<ScreenView*>();
         Peer other;
         QSignalSpy approvals(&other, &Peer::approval);
+        pairPeer(other);
+        pairWindow(w);
         QVERIFY(other.listen(29904, "stop-sync-code"));
         peer->connectTo("127.0.0.1", 29904, "stop-sync-code");
         QTRY_VERIFY(peer->ready() && other.ready());
@@ -435,6 +459,7 @@ class UiTest : public QObject {
     void singleControlCancelsWaiting() {
         MainWindow w;
         w.show();
+        pairWindow(w);
         auto* button = w.findChild<QPushButton*>("start");
         auto* control = w.findChild<CastControl*>();
         QVERIFY(button && control);
@@ -462,6 +487,50 @@ class UiTest : public QObject {
         QVERIFY(released.listen(QHostAddress::AnyIPv4, 27183));
     }
 
+    void settingsButtonOrderIsCancelThenSave() {
+        MainWindow w;
+        w.findChild<QPushButton*>("settings")->click();
+        auto* dialog = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(dialog->isVisible());
+        auto* box = w.findChild<QDialogButtonBox*>("buttonBox");
+        QVERIFY(box);
+        auto* cancel = box->button(QDialogButtonBox::Cancel);
+        auto* save = box->button(QDialogButtonBox::Save);
+        QCOMPARE(cancel->text(), QString::fromUtf8("取消"));
+        QCOMPARE(save->text(), QString::fromUtf8("保存"));
+        QTRY_VERIFY(cancel->isVisible() && save->isVisible());
+        const int cancelX = cancel->mapTo(box, QPoint()).x();
+        const int saveX = save->mapTo(box, QPoint()).x();
+        QVERIFY2(cancelX < saveX, qPrintable(QString("cancel x=%1 save x=%2").arg(cancelX).arg(saveX)));
+        dialog->reject();
+    }
+
+    void pairCodeMatchListensUntilSettingsClose() {
+        MainWindow w;
+        w.findChild<QPushButton*>("settings")->click();
+        auto* dialog = w.findChild<QDialog*>("SettingsDialog");
+        QTRY_VERIFY(dialog->isVisible());
+        auto* token = w.findChild<QLineEdit*>("token");
+        auto* pair = w.findChild<QPushButton*>("pairCode");
+        auto* state = w.findChild<QLabel*>("pairingState");
+        QVERIFY(token && pair && state);
+        token->setText("R7T2M9K4Q8N3");
+        pair->click();
+        // Listening is a long-running state: the button cannot be pressed again.
+        QVERIFY(!pair->isEnabled());
+        QCOMPARE(pair->text(), QString::fromUtf8("监听中…"));
+        QVERIFY(token->isReadOnly());
+        QVERIFY(!state->text().isEmpty());
+        // Leaving the settings dialog stops both the listener and the probe responder.
+        dialog->reject();
+        QTRY_VERIFY(pair->isEnabled());
+        QCOMPARE(pair->text(), QString::fromUtf8("配对码匹配"));
+        QVERIFY(!token->isReadOnly());
+        QVERIFY(state->text().isEmpty());
+        QCOMPARE(static_cast<QPushButton*>(w.findChild<QPushButton*>("pairCode"))->text(),
+                 QString::fromUtf8("配对码匹配"));
+    }
+
     void connectionSettingsAreSeparated() {
         MainWindow w;
         w.findChild<QPushButton*>("settings")->click();
@@ -485,6 +554,7 @@ class UiTest : public QObject {
     void receiveAndControlConsent() {
         MainWindow w;
         w.show();
+        pairWindow(w);
         auto* view = w.findChild<ScreenView*>();
         auto *start = w.findChild<QPushButton*>("start"), *stop = start;
         auto *share = w.findChild<QCheckBox*>("share"), *receive = w.findChild<QCheckBox*>("receive"),
@@ -505,6 +575,7 @@ class UiTest : public QObject {
         start->click();
         QVERIFY(state->locked() && !state->occupied());
         Peer client;
+        pairPeer(client);
         QSignalSpy connected(&client, &Peer::connected), status(&client, &Peer::status),
             sessions(&client, &Peer::session), approvals(&client, &Peer::approval),
             profiles(&client, &Peer::profile);

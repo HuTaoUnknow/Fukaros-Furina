@@ -1,22 +1,59 @@
 #include "pairing_qr.h"
 #include "qrcodegen.hpp"
 #include "quirc.h"
+#include <QHostAddress>
 #include <QNetworkInterface>
+#include <algorithm>
 #include <cstring>
 #include <memory>
 
+namespace {
+// A QR host must be routable from the tablet. Loopback, link-local (169.254/16)
+// and adapter-only addresses never are, and a PC with VMware, Hyper-V, WSL or a
+// VPN usually lists those first.
+bool reachableHost(const QHostAddress& address) {
+    if (address.protocol() != QAbstractSocket::IPv4Protocol)
+        return false;
+    if (address.isNull() || address.isLoopback() || address.isLinkLocal())
+        return false;
+    return true;
+}
+
+int interfaceRank(const QNetworkInterface& iface) {
+    // Wired and Wi-Fi adapters first; virtual adapters are usually paired with a
+    // host-only subnet the tablet cannot reach.
+    switch (iface.type()) {
+    case QNetworkInterface::Ethernet:
+    case QNetworkInterface::Wifi:
+        return 0;
+    case QNetworkInterface::Virtual:
+    case QNetworkInterface::Unknown:
+        return 2;
+    default:
+        return 1;
+    }
+}
+} // namespace
+
 QStringList pairingLocalIpv4() {
-    QStringList hosts;
+    QList<QPair<int, QString>> ranked;
     for (const auto& iface : QNetworkInterface::allInterfaces()) {
-        if (!(iface.flags() & QNetworkInterface::IsUp))
+        const auto flags = iface.flags();
+        if (!(flags & QNetworkInterface::IsUp) || !(flags & QNetworkInterface::IsRunning))
             continue;
+        const int rank = interfaceRank(iface);
         for (const auto& entry : iface.addressEntries()) {
-            const auto address = entry.ip();
-            if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback())
-                hosts << address.toString();
+            if (!reachableHost(entry.ip()))
+                continue;
+            ranked.push_back({rank, entry.ip().toString()});
         }
     }
-    hosts.removeDuplicates();
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](const auto& a, const auto& b) { return a.first < b.first; });
+    QStringList hosts;
+    for (const auto& row : ranked)
+        if (!hosts.contains(row.second))
+            hosts << row.second;
     return hosts;
 }
 
@@ -81,13 +118,17 @@ QStringList pairingReadQrImage(const QImage& image) {
     if (!found.isEmpty())
         return found;
     // A camera's low-pass image can sit on a module phase quirc misses.
-    // A second and third size usually land off that phase.
-    for (const int percent : {75, 50}) {
+    // A second and third size usually land off that phase. Shrinking also turns
+    // a slightly blurred frame into clean module edges, so try that first.
+    for (const int percent : {75, 50, 150, 200}) {
         const int width = qMax(21, gray.width() * percent / 100);
         const int height = qMax(21, gray.height() * percent / 100);
         if (width == gray.width() && height == gray.height())
             continue;
-        found = readGrayscale(gray.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        if (width > 2600 || height > 2600)
+            continue;
+        found = readGrayscale(gray.scaled(width, height, Qt::IgnoreAspectRatio,
+                                           percent < 100 ? Qt::SmoothTransformation : Qt::FastTransformation));
         if (!found.isEmpty())
             return found;
     }
@@ -167,4 +208,18 @@ QImage pairingRotateClockwise(const QImage& source, int degrees) {
             turned.scanLine(width - 1 - x)[y] = row[x];
     }
     return turned;
+}
+
+QStringList pairingReadQrFrame(const QImage& sensorFrame, int uprightDegrees) {
+    if (sensorFrame.isNull())
+        return {};
+    const QImage sensor = sensorFrame.convertToFormat(QImage::Format_Grayscale8);
+    const int preferred = ((uprightDegrees % 360) + 360) % 360;
+    for (const int step : {0, 90, 180, 270}) {
+        const int angle = (preferred + step) % 360;
+        const auto found = pairingReadQrImage(pairingRotateClockwise(sensor, angle));
+        if (!found.isEmpty())
+            return found;
+    }
+    return {};
 }

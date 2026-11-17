@@ -158,6 +158,76 @@ void MainWindow::refreshPairingHint() {
 void MainWindow::bindPairingUi() {
     connect(cfg->token, &QLineEdit::textChanged, this, [this] { refreshPairingHint(); });
     connect(cfg->scanQr, &QPushButton::clicked, this, &MainWindow::scanPairingQr);
+    connect(cfg->pairCode, &QPushButton::clicked, this, &MainWindow::beginPairMatch);
+}
+
+void MainWindow::beginPairMatch() {
+    if (m_castUi->locked()) {
+        log("投屏方式已锁定，请点击停止后修改设置。",
+            "Casting options are locked. Press Stop to change settings.");
+        return;
+    }
+    if (m_pairMatch)
+        return;
+    const auto secret = pairingNormalizeManualCode(cfg->token->text());
+    const auto check = pairingCheckManualCode(secret);
+    if (!check.ok) {
+        log(check.chinese, check.english);
+        return;
+    }
+    saveSettings();
+    stop();
+    PairingCredential credential;
+    credential.kind = PairingSecretKind::ManualCode;
+    credential.secret = secret;
+    if (!pairingListen(m_peer, 27183, credential, QStringLiteral("0.0.0.0"))) {
+        log("配对码监听失败。", "The pairing code could not listen.");
+        return;
+    }
+    // Answer the PC's probes for the whole session, so it can show this address and
+    // follow it when the address changes.
+    m_discovery.start(QStringLiteral("0.0.0.0"));
+    m_pairMatch = true;
+    m_pairCode = secret;
+    m_pairPeerIp.clear();
+    cfg->pairCode->setEnabled(false);
+    cfg->pairCode->setText("监听中…");
+    cfg->token->setReadOnly(true);
+    updatePairingHint();
+    log("正在监听配对码匹配。退出设置会自动停止。",
+        "Listening for pairing-code matching. Closing settings stops it.");
+}
+
+void MainWindow::endPairMatch() {
+    if (!m_pairMatch)
+        return;
+    m_pairMatch = false;
+    m_pairCode.clear();
+    m_pairPeerIp.clear();
+    cfg->pairCode->setEnabled(true);
+    cfg->pairCode->setText("配对码匹配");
+    cfg->token->setReadOnly(false);
+    cfg->pairingState->clear();
+    m_discovery.stop();
+    m_peer.close();
+    log("已停止配对码监听。", "Stopped listening for pairing-code matching.");
+}
+
+void MainWindow::updatePairingHint() {
+    if (!m_pairMatch) {
+        cfg->pairingState->clear();
+        return;
+    }
+    if (m_pairPeerIp.isEmpty()) {
+        cfg->pairingState->setText(
+            "正在监听，等待电脑用配对码匹配…\nEN: Listening. Waiting for the PC to match the code.");
+        return;
+    }
+    cfg->pairingState->setText(
+        QString("已与 %1 配对（配对码 %2）。配对码只用于辨认设备，连接已改用安全密钥。\n"
+                "EN: Paired with %1 (code %2). The code only identifies the device; the secure key is used "
+                "from now on.")
+            .arg(m_pairPeerIp, m_pairCode));
 }
 
 void MainWindow::scanPairingQr() {
@@ -167,11 +237,14 @@ void MainWindow::scanPairingQr() {
         return;
     }
 #ifdef Q_OS_ANDROID
+    log("正在打开相机，对准电脑上的配对二维码。",
+        "Opening the camera. Point it at the pairing QR code on the PC.");
     pairingStartCameraScan(this, [this](const QString& payload) {
         if (payload.isEmpty()) {
             log("没有扫到配对二维码。", "No pairing QR code was scanned.");
             return;
         }
+        log("已扫到二维码，正在校验并连接。", "The QR code was scanned. Validating and connecting.");
         pairFromQrPayload(payload);
     });
 #else

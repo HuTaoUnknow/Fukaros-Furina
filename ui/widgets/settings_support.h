@@ -37,3 +37,9 @@ class StepHelpButton : public QPushButton {
 };
 
 void furinaConfigureSettingsScroll(QScrollArea* scroll);
+
+// The settings dialog reads 取消, 保存 from left to right. QDialogButtonBox orders
+// its layout by button role, and a style change rebuilds that layout, so the order
+// is applied again on Show rather than patched once. Call after the stylesheet is
+// set; `dialog` must contain both the Save and Cancel buttons.
+void furinaOrderDialogSaveButton(QWidget* dialog);

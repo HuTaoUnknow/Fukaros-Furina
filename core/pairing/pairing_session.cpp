@@ -17,6 +17,8 @@ QString channelSecret(const PairingCredential& credential) {
     return credential.secret;
 }
 
+// Remember every key a Peer negotiates. The server generates it; the client receives it.
+// Both ends therefore keep the same 32-byte key for later session connections.
 void rememberEstablishedKey(Peer& peer) {
     static QObject* sink = new QObject;
     QMutexLocker lock(&g_attachedMutex);
@@ -25,7 +27,7 @@ void rememberEstablishedKey(Peer& peer) {
     g_attached.insert(&peer);
     QObject::connect(&peer, &Peer::longTermKeyEstablished, &peer, [](const QByteArray& key) {
         if (key.size() == 32)
-            SecretStore::instance().store(QStringLiteral("channel-long-term-key"), key);
+            SecretStore::instance().store(QString(kChannelLongTermKey), key);
     });
     QObject::connect(&peer, &QObject::destroyed, sink, [p = &peer] {
         QMutexLocker inner(&g_attachedMutex);
@@ -33,18 +35,12 @@ void rememberEstablishedKey(Peer& peer) {
     });
 }
 
-void applyCredential(Peer& peer, const PairingCredential& credential) {
+void applyCredential(Peer& peer) {
     rememberEstablishedKey(peer);
-    // A QR attempt must use field `s`. A stored long-term key would ignore that secret.
-    if (credential.kind == PairingSecretKind::OneTimeQr) {
-        peer.setLongTermKey({});
-        return;
-    }
-    // Load a key saved by an earlier process. Do not clear a key this Peer already
-    // negotiated: the store write is queued, and wiping it would desync the reconnect.
-    const auto stored = SecretStore::instance().load(QStringLiteral("channel-long-term-key"));
-    if (stored.size() == 32)
-        peer.setLongTermKey(stored);
+    // Explicit pairing always authenticates with the pairing code or the QR secret.
+    // A stored long-term key must not replace it: that is how two ends holding different
+    // old keys end up comparing different SPAKE2 passwords and reject every code.
+    peer.setLongTermKey({});
 }
 } // namespace
 
@@ -57,7 +53,7 @@ bool pairingCredentialAccepts(const PairingCredential& credential) {
 bool pairingListen(Peer& peer, quint16 port, const PairingCredential& credential, const QString& bindAddress) {
     if (!pairingCredentialAccepts(credential))
         return false;
-    applyCredential(peer, credential);
+    applyCredential(peer);
     return peer.listen(port, channelSecret(credential), bindAddress);
 }
 
@@ -65,7 +61,40 @@ bool pairingConnect(Peer& peer, const QString& host, quint16 port, const Pairing
                     const QString& localAddress) {
     if (!pairingCredentialAccepts(credential))
         return false;
-    applyCredential(peer, credential);
+    applyCredential(peer);
     peer.connectTo(host, port, channelSecret(credential), localAddress);
+    return true;
+}
+
+QByteArray pairingStoredKey(Peer& peer) {
+    const auto preset = peer.longTermKey();
+    if (preset.size() == 32)
+        return preset;
+    const auto stored = SecretStore::instance().load(QString(kChannelLongTermKey));
+    return stored.size() == 32 ? stored : QByteArray();
+}
+
+bool pairingStoredKeyAvailable(Peer& peer) {
+    return pairingStoredKey(peer).size() == 32;
+}
+
+bool sessionListen(Peer& peer, quint16 port, const QString& bindAddress) {
+    const auto key = pairingStoredKey(peer);
+    // Without a key the token would be a public constant and anyone on the LAN could connect.
+    if (key.size() != 32)
+        return false;
+    applyCredential(peer);
+    peer.setLongTermKey(key);
+    return peer.listen(port, kSessionToken, bindAddress);
+}
+
+bool sessionConnect(Peer& peer, const QString& host, quint16 port, const QString& localAddress) {
+    const auto key = pairingStoredKey(peer);
+    // Without a key the token would be a public constant and anyone on the LAN could connect.
+    if (key.size() != 32)
+        return false;
+    applyCredential(peer);
+    peer.setLongTermKey(key);
+    peer.connectTo(host, port, kSessionToken, localAddress);
     return true;
 }

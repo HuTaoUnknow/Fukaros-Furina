@@ -3,21 +3,25 @@
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
+#include "pairing_session.h"
 #include <QGuiApplication>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QFileInfo>
+#include <QFile>
+#include <QDir>
 #include <QHostAddress>
 #include <QSignalBlocker>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QResizeEvent>
 #include <QButtonGroup>
+#include <QBoxLayout>
 #include "desktop_tray.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), cfg(new Ui::SettingsDialog), m_settings(new QDialog(this)),
-      m_peer(this), m_adb(this), m_usbNetwork(this) {
+      m_peer(this), m_adb(this), m_usbNetwork(this), m_lanDiscovery(this) {
     setupInterface();
     m_direction->setSharing(furinaRestoreCastDirection(m_direction->sharing()));
     connectSessionEvents();
@@ -44,8 +48,19 @@ MainWindow::~MainWindow() {
 
 void MainWindow::log(const QString& message, const QString& english) {
     const auto entry = furinaLog(message, english);
-    if (!entry.isEmpty())
-        ui->log->appendPlainText(entry);
+    if (entry.isEmpty())
+        return;
+    ui->log->appendPlainText(entry);
+    // The window log is the only record of why a cast failed on the user's
+    // machine, and it is gone once the app closes. Mirror it to a file.
+    static QFile file(QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+                          .filePath("fukaros.log"));
+    static bool opened = file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text);
+    if (opened) {
+        file.write(entry.toUtf8());
+        file.write("\n");
+        file.flush();
+    }
 }
 
 void MainWindow::maximize() {
@@ -79,9 +94,10 @@ void MainWindow::setupInterface() {
     ui->setupUi(this);
     cfg->setupUi(m_settings);
     furinaConfigureSettingsScroll(cfg->settingsScroll);
-    cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");
-    cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
     setStyleSheet(furinaStyle());
+    // The settings dialog reads Cancel, Save (Cancel left, Save right). Applied
+    // after the stylesheet because a style change rebuilds the button box layout.
+    furinaOrderDialogSaveButton(m_settings);
     furinaConfigureToolIcons(ui->settings, ui->maximize);
     setWindowIcon(QIcon(":/icons/app.png"));
     setWindowTitle("Fukaros · 电脑端");
@@ -101,7 +117,8 @@ void MainWindow::setupInterface() {
     connect(m_presentationSync, &PresentationSync::status, this,
             [this](const QString& cn, const QString& en) { log(cn, en); });
     m_castUi = new CastUiState(this);
-    m_castControl = new CastControl(this, m_castUi, &m_peer);
+    // Injected rather than linked: the session widget layer must not depend on the secret store.
+    m_castControl = new CastControl(this, m_castUi, &m_peer, [this] { return pairingStoredKeyAvailable(m_peer); });
     bindPairingUi();
 }
 
@@ -133,5 +150,10 @@ void MainWindow::connectActions() {
         saveSettings();
         log("设置已保存，请按开始重新连接。", "Settings saved. Press Start to reconnect.");
     });
-    connect(m_settings, &QDialog::rejected, this, &MainWindow::loadSettings);
+    connect(m_settings, &QDialog::rejected, this, [this] {
+        loadSettings();
+        endPairMatch();
+    });
+    connect(m_settings, &QDialog::accepted, this, &MainWindow::endPairMatch);
+    connect(m_settings, &QDialog::finished, this, &MainWindow::endPairMatch);
 }

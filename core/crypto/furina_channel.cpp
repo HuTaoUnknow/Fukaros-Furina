@@ -213,7 +213,7 @@ bool FurinaChannel::onMessage(quint8 type, const QByteArray& body, QByteArray* e
         const auto expect = m_spake->peerConfirmation();
         if (crypto_verify32(reinterpret_cast<const uint8_t*>(body.constData()),
                             reinterpret_cast<const uint8_t*>(expect.constData())) != 0) {
-            fail("配对失败，已拒绝。\nPairing failed. Connection rejected.");
+            fail("配对失败或安全密钥已变更，已拒绝。\nPairing failed or the secure key changed. Connection rejected.");
             return false;
         }
         m_haveConfirm = true;

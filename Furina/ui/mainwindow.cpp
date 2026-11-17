@@ -3,6 +3,7 @@
 #include "ui_mainwindow.h"
 #include "ui_settings.h"
 #include "settings_support.h"
+#include "pairing_session.h"
 #include <QSettings>
 #include <QRandomGenerator>
 #include <QNetworkInterface>
@@ -72,9 +73,10 @@ void MainWindow::setupInterface() {
     ui->setupUi(this);
     cfg->setupUi(m_settings);
     furinaConfigureSettingsScroll(cfg->settingsScroll);
-    cfg->buttonBox->button(QDialogButtonBox::Save)->setText("保存");
-    cfg->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
     setStyleSheet(furinaStyle());
+    // The settings dialog reads Cancel, Save (Cancel left, Save right). Applied
+    // after the stylesheet because a style change rebuilds the button box layout.
+    furinaOrderDialogSaveButton(m_settings);
     furinaConfigureToolIcons(ui->settings, ui->maximize);
     setWindowIcon(QIcon(":/icons/app.png"));
     setWindowTitle("Furina · 平板端");
@@ -95,7 +97,8 @@ void MainWindow::setupInterface() {
             [this](const QString& cn, const QString& en) { log(cn, en); });
     m_consent->setReceiverOrientation([this] { return width() < height(); });
     m_castUi = new CastUiState(this);
-    m_castControl = new CastControl(this, m_castUi, &m_peer);
+    // Injected rather than linked: the session widget layer must not depend on the secret store.
+    m_castControl = new CastControl(this, m_castUi, &m_peer, [this] { return pairingStoredKeyAvailable(m_peer); });
     m_layout = new MobileLayout(this);
     bindPairingUi();
 }
@@ -134,7 +137,12 @@ void MainWindow::connectActions() {
         saveSettings();
         log("设置已保存，请按开始重新启动服务。", "Settings saved. Press Start to restart the service.");
     });
-    connect(m_settings, &QDialog::rejected, this, &MainWindow::loadSettings);
+    connect(m_settings, &QDialog::rejected, this, [this] {
+        loadSettings();
+        endPairMatch();
+    });
+    connect(m_settings, &QDialog::accepted, this, &MainWindow::endPairMatch);
+    connect(m_settings, &QDialog::finished, this, &MainWindow::endPairMatch);
     connect(cfg->usbSettings, &QPushButton::clicked, &m_android, &AndroidBridge::usbSettings);
     connect(cfg->refreshAddresses, &QPushButton::clicked, this, &MainWindow::refreshAddresses);
     connect(cfg->accessibility, &QPushButton::clicked, &m_android, &AndroidBridge::accessibility);

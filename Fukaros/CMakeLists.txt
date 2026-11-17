@@ -21,6 +21,7 @@ add_library(fukaros_platform STATIC
     core/input/desktop_pointer.cpp core/input/desktop_pointer.h core/input/pointer_gain.c
     core/transport/adb.cpp core/transport/adb.h
     core/transport/usb_network.cpp core/transport/usb_network.h
+    core/transport/lan_discovery.cpp core/transport/lan_discovery.h
 )
 target_include_directories(fukaros_platform PUBLIC core/app core/display core/input core/transport)
 target_link_libraries(fukaros_platform PUBLIC fukaros_display_native furina_session furina_settings)

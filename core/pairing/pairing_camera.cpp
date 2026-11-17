@@ -5,11 +5,9 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QImage>
-#include <QJniEnvironment>
 #include <QJniObject>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QPermissions>
 #include <android/log.h>
 #include <atomic>
 #include <jni.h>
@@ -61,19 +59,18 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_furina_black_PairingCamera_nativeD
                        int(displayDegrees), int(uprightDegrees));
         return nullptr;
     }
-    const QImage upright = pairingRotateClockwise(luma, uprightDegrees);
-    const auto found = pairingReadQrImage(upright);
+    const auto found = pairingReadQrFrame(luma, uprightDegrees);
     if (found.isEmpty()) {
         if (attempt == 1 || attempt % 30 == 0)
-            FURINA_LOG("decode miss attempt=%d frame=%dx%d rowStride=%d pixelStride=%d bytes=%d upright=%dx%d "
+            FURINA_LOG("decode miss attempt=%d frame=%dx%d rowStride=%d pixelStride=%d bytes=%d "
                        "rotation=%d display=%d",
                        attempt, int(width), int(height), int(rowStride), int(pixelStride), int(length),
-                       upright.width(), upright.height(), int(uprightDegrees), int(displayDegrees));
+                       int(uprightDegrees), int(displayDegrees));
         return nullptr;
     }
-    FURINA_LOG("decode ok attempt=%d frame=%dx%d upright=%dx%d rotation=%d display=%d", attempt, int(width),
-               int(height), upright.width(), upright.height(), int(uprightDegrees), int(displayDegrees));
     const auto utf8 = found.first().toUtf8();
+    FURINA_LOG("decode ok attempt=%d frame=%dx%d bytes=%d rotation=%d display=%d textChars=%d", attempt, int(width),
+               int(height), int(length), int(uprightDegrees), int(displayDegrees), int(utf8.size()));
     return env->NewStringUTF(utf8.constData());
 }
 
@@ -92,28 +89,17 @@ extern "C" JNIEXPORT void JNICALL Java_com_furina_black_PairingCamera_nativeFini
 }
 
 void pairingStartCameraScan(QObject* context, PairingScanCallback callback) {
-    // requestPermission is an instance method. A missing application still finishes the scan.
-    auto* app = QCoreApplication::instance();
-    if (!app) {
-        if (callback)
-            callback({});
-        return;
+    Q_UNUSED(context);
+    // QCoreApplication::requestPermission goes through QtAndroidAccessibility's object
+    // context check, which deadlocks against requestPermissionsInternal while the
+    // accessibility service is enabled and silently reports the permission as denied.
+    // The activity asks for the permission itself and reports back through nativeFinished.
+    g_decodeAttempts.store(0);
+    {
+        QMutexLocker lock(&g_callbackMutex);
+        g_callback = callback;
     }
-    app->requestPermission(QCameraPermission{}, context, [callback](const QPermission& permission) {
-        if (permission.status() != Qt::PermissionStatus::Granted) {
-            FURINA_LOG("camera permission denied");
-            if (callback)
-                callback({});
-            return;
-        }
-        g_decodeAttempts.store(0);
-        FURINA_LOG("camera permission granted");
-        {
-            QMutexLocker lock(&g_callbackMutex);
-            g_callback = callback;
-        }
-        QJniObject::callStaticMethod<void>("com/furina/black/PairingCamera", "start", "()V");
-    });
+    QJniObject::callStaticMethod<void>("com/furina/black/PairingCamera", "requestStart", "()V");
 }
 #else
 void pairingStartCameraScan(QObject*, PairingScanCallback) {}

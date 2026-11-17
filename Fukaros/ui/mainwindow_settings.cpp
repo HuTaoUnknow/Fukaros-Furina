@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QGuiApplication>
 #include <QPixmap>
+#include <QScrollArea>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QFileInfo>
@@ -129,6 +130,23 @@ void MainWindow::refreshPairingHint() {
 void MainWindow::bindPairingUi() {
     connect(cfg->token, &QLineEdit::textChanged, this, [this] { refreshPairingHint(); });
     connect(cfg->showQr, &QPushButton::clicked, this, &MainWindow::showPairingQr);
+    connect(cfg->pairCode, &QPushButton::clicked, this, &MainWindow::beginPairMatch);
+    m_pairRetry.setParent(this);
+    m_pairRetry.setSingleShot(false);
+    connect(&m_pairRetry, &QTimer::timeout, this, [this] {
+        if (!m_pairing || m_peer.ready())
+            return;
+        // An attempt that settled without connecting must be forgotten before the
+        // next one, or the next connect is skipped as still pending.
+        if (m_pending) {
+            m_pending = false;
+            m_peer.close();
+        }
+        if (m_pairTargets.isEmpty())
+            startPairProbe();
+        else
+            pairConnectNext();
+    });
     m_qrExpiry.setParent(this);
     m_qrExpiry.setSingleShot(true);
     connect(&m_qrExpiry, &QTimer::timeout, this, [this] {
@@ -163,6 +181,138 @@ void MainWindow::retireOneTimeListener() {
     m_peer.close();
     m_pending = false;
     m_castUi->connectionLost();
+}
+
+void MainWindow::beginPairMatch() {
+    if (m_castUi->locked()) {
+        log("投屏方式已锁定，请点击停止后修改设置。",
+            "Casting options are locked. Press Stop to change settings.");
+        return;
+    }
+    if (m_pairing)
+        return;
+    const auto secret = pairingNormalizeManualCode(cfg->token->text());
+    const auto check = pairingCheckManualCode(secret);
+    if (!check.ok) {
+        log(check.chinese, check.english);
+        return;
+    }
+    saveSettings();
+    // Pairing is its own session: never inherit a casting attempt.
+    stop();
+    m_pairCode = secret;
+    m_pairing = true;
+    m_pairPaired = false;
+    m_pairTargets.clear();
+    m_pairPeerIp.clear();
+    m_pairPeerName.clear();
+    cfg->pairCode->setEnabled(false);
+    cfg->pairCode->setText("匹配中…");
+    cfg->token->setReadOnly(true);
+    // A wrong code must not be retired with a lockout: the limit is five failures,
+    // so retries stay far enough apart to never trip it while waiting.
+    m_pairRetry.setInterval(8000);
+    updatePairingHint();
+    log("配对码匹配中，等待另一端。可随时关闭设置或按取消停止。",
+        "Matching pairing codes. Close settings or press Cancel to stop.");
+    const auto host = cfg->host->text().trimmed();
+    QHostAddress address;
+    if (address.setAddress(host) && address.protocol() == QAbstractSocket::IPv4Protocol)
+        m_pairTargets << host;
+    pairConnectNext();
+    m_pairRetry.start();
+}
+
+void MainWindow::endPairMatch() {
+    if (!m_pairing)
+        return;
+    const bool wasMatching = m_pairing;
+    m_pairing = false;
+    m_pairPaired = false;
+    m_pairRetry.stop();
+    m_pairTargets.clear();
+    m_pairCode.clear();
+    m_pairPeerIp.clear();
+    m_pairPeerName.clear();
+    cfg->pairCode->setEnabled(true);
+    cfg->pairCode->setText("配对码匹配");
+    cfg->token->setReadOnly(false);
+    cfg->pairingState->clear();
+    // The probe and the pairing link belong to the matching session only.
+    m_lanDiscovery.cancel();
+    m_peer.close();
+    m_pending = false;
+    if (wasMatching)
+        log("已停止配对码匹配。", "Stopped pairing-code matching.");
+}
+
+void MainWindow::startPairProbe() {
+    if (!m_pairing)
+        return;
+    m_pairTargets.clear();
+    m_lanDiscovery.start();
+}
+
+void MainWindow::pairProbeHosts(const QStringList& hosts) {
+    if (!m_pairing)
+        return;
+    m_pairTargets = hosts;
+    pairConnectNext();
+}
+
+void MainWindow::pairConnectNext() {
+    if (!m_pairing || m_pairCode.isEmpty())
+        return;
+    if (m_peer.ready())
+        return;
+    if (m_pairTargets.isEmpty())
+        return;
+    // The previous attempt may still be settling. Do not pile a second link on it.
+    if (m_pending)
+        return;
+    const auto host = m_pairTargets.takeFirst();
+    if (m_pairPaired) {
+        // The code has done its job: it now only identifies the device.
+        // A renewed link authenticates with the key the match minted, so the
+        // code never becomes a lasting password that has to be kept.
+        m_pairTargets.clear();
+        m_pending = true;
+        if (!sessionConnect(m_peer, host, 27183))
+            m_pending = false;
+        return;
+    }
+    PairingCredential credential;
+    credential.kind = PairingSecretKind::ManualCode;
+    credential.secret = m_pairCode;
+    if (!pairingConnect(m_peer, host, 27183, credential))
+        return;
+    m_pending = true;
+    m_pairPeerIp = host;
+    updatePairingHint();
+}
+
+void MainWindow::updatePairingHint() {
+    if (m_pairPaired) {
+        const auto ip = m_pairPeerIp.isEmpty() ? QStringLiteral("—") : m_pairPeerIp;
+        cfg->pairingState->setText(
+            QString("已与 %1 配对（配对码 %2）。配对码只用于辨认设备，连接已改用安全密钥。\n"
+                    "EN: Paired with %1 (code %2). The code only identifies the device; the secure key is used "
+                    "from now on.")
+                .arg(ip, m_pairPeerName));
+        return;
+    }
+    if (!m_pairing) {
+        cfg->pairingState->clear();
+        return;
+    }
+    if (m_pairTargets.isEmpty())
+        cfg->pairingState->setText("正在局域网内查找配对端…\nEN: Searching the local network for the other device.");
+    else
+        cfg->pairingState->setText(QString("正在匹配 %1…\nEN: Matching %1.").arg(m_pairPeerIp));
+}
+
+void MainWindow::pairWithCode() {
+    beginPairMatch();
 }
 
 void MainWindow::showPairingQr() {
@@ -217,11 +367,26 @@ void MainWindow::showPairingQr() {
     m_oneTimeSecret = secret;
     m_oneTimeExpiry = payload.expiry;
     m_oneTimeListen = true;
-    cfg->qrImage->setMinimumSize(image.size());
-    cfg->qrImage->setPixmap(QPixmap::fromImage(image));
-    if (!m_castUi->locked())
-        m_castUi->lockPending();
+    // The settings page clips horizontally, so shrink with nearest-neighbour
+    // sampling instead of letting the label push the layout wider than the viewport.
+    auto shown = image;
+    const int available = qMax(160, cfg->settingsScroll->viewport()->width() - 32);
+    if (shown.width() > available) {
+        const double factor = double(available) / shown.width();
+        shown = shown.scaled(qMax(1, int(shown.width() * factor)), qMax(1, int(shown.height() * factor)),
+                             Qt::KeepAspectRatio, Qt::FastTransformation);
+    }
+    cfg->qrImage->setMinimumSize(0, 0);
+    cfg->qrImage->setPixmap(QPixmap::fromImage(shown));
+    // A QR scan pairs; it does not start casting. Locking the UI here would leave
+    // settings greyed out after a successful pairing.
+    m_pairingOnly = true;
     m_pending = true;
     m_qrExpiry.start(static_cast<int>(kPairingQrTtlSeconds * 1000));
-    log("已生成配对二维码，等待平板扫描。", "Created a pairing QR code. Waiting for the tablet to scan it.");
+    log(QString("已生成配对二维码，监听 %1:%2，等待平板扫描。")
+            .arg(payload.host)
+            .arg(payload.port),
+        QString("Created a pairing QR code listening on %1:%2. Waiting for the tablet to scan it.")
+            .arg(payload.host)
+            .arg(payload.port));
 }

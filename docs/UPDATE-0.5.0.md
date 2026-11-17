@@ -21,8 +21,21 @@
 - 电脑显示二维码，平板扫描。文本为 `fukaros://pair?v=2&h=HOST&p=PORT&s=ONE_TIME_SECRET&f=FINGERPRINT&e=UNIX_EXPIRY`，约 2 分钟内有效，同一密钥不能再用。
 - 字段 `s` 是 128 位一次性密钥。`pairingListen` / `pairingConnect` 把它加上 `ot1.` 前缀后交给 FUR2，作为这一次的 SPAKE2 口令，不安装成 HMAC 密钥。
 - 字段 `f` 是桌面 X25519 公钥的 SHA-256。私钥存在安全存储的 `desktop-x25519-secret`，公钥由信道里的 `furinaX25519PublicKey` 算出。平板在发出流量前固定这个指纹。
-- 手动配对码至少 12 位，字母表不含 I、O 和容易混淆的数字，须同时有字母和数字，并拒绝全相同字符和简单顺子。界面在输入时提示。
+- 手动配对码至少 6 位，可用任意英文字母和数字（I/O、0/1 不再排除），只拒绝全相同字符。界面在输入时提示。
 - Windows 用当前用户的 DPAPI 保存密钥。Android 用 Keystore。旧的明文 `token` 会迁入安全存储后删除。日志和二维码提示不包含密钥内容。
+
+## 配对与连接分离（2026-11-15 修订）
+
+此前首页“开始”在需要配对时又拿配对码当口令，而 `pairingListen` / `pairingConnect` 会在读到已存的 `channel-long-term-key` 时改用那 32 字节，两端各有一把旧密钥就必然握手失败，表现为 “Pairing failed. Connection rejected.”。现在：
+
+- 显式配对永远清掉内存里的长期密钥，配对码或二维码密钥就是 SPAKE2 口令。成功后服务端生成新的 32 字节长期密钥，两端都存。
+- 首页“开始”改走新的 `sessionListen` / `sessionConnect`：只认已共享的 32 字节密钥，没有密钥时按钮置灰并提示“请先在设置中完成配对”，点击会打开设置。无密钥时这两个函数直接返回 `false`，不会退化成公开常量口令。
+- “配对码匹配”和“扫描二维码”并排放在两端设置页；配对成功后只保存密钥并关闭连接，提示回首页按开始。二维码连接之后同样靠长期密钥识别。
+- Wi-Fi 模式下电脑先连设置里的 IP，4 秒失败后由新的 `LanDiscovery` 向本网段广播发现（`FURINA_DISCOVER_V1`，端口 27184），逐个尝试应答者，全部失败时明确提示。以太网和 Wi-Fi 网卡都参与（Wi-Fi 是 `IF_TYPE_IEEE80211`），USB 网络共享网卡不参与。
+
+测试：`pairing` 增加 `sessionListenRequiresAStoredKey`，并把“不同配对码靠旧长期密钥连上”的旧断言反转为必须失败、再验证同码重配对会换新密钥；新增 `lan_discovery` 四项（单应答、应答全部返回、无应答失败、取消后丢弃迟到应答）。两端 `ui` 测试改为注入测试密钥，新增 `startRequiresAPairedKey` 与 `pairCodeButtonPairsAndSavesKey`。
+
+细节见 [配对](security-pairing.md) 与 [加密信道](security-channel.md)。
 
 细节见 [配对](security-pairing.md)。
 
@@ -49,8 +62,18 @@
 
 `ui` 在 Windows 上仍会跳过托盘用例。上述两处只改了测试等待和 Linux 回环上的期望源地址，没有改产品行为。
 
+## 平板上的相机扫码
+
+2026-11-15 在小米平板（liuqin，Android 15，1800×2880，density 400）上用 USB 调试安装 Debug APK，验证了相机扫码。
+
+- 相机权限由 `FurinaActivity` 自己申请，不再走 `QCoreApplication::requestPermission`。后者会经 QtAndroidAccessibility 做对象上下文检查，开启无障碍服务时与 `requestPermissionsInternal` 互锁，权限被静默判为拒绝。
+- 预览方向按 `pairingCameraUprightDegrees` 算出直立角度，再减去相机 HAL 的 SurfaceTexture 变换（`halQuarterTurns()`）。这块设备的 HAL 固定做一次轴转置，不减掉的话预览会多转 90°。
+- 满幅缩放按实际施加的角度算，不是按直立角度算。横屏时两者差一个直角，按直立角度算会在左右各留约 12.5% 黑边。
+- 解码按直立于首选角度、再依次试其余三个直角，因此厂商对“缓冲区是否已经直立”的分歧不影响识别。
+- 实测日志：横屏 `display=ROTATION_90 sensor=90 upright=0 hal=90 applied=270 view=2880x1800 cover=2.4`；竖屏 `display=ROTATION_0 sensor=90 upright=90 hal=90 applied=0 view=1800x2880 cover=2.4`。两种方向截图四边均无黑边。
+- 未在这台设备上完成一次端到端配对：扫码界面正常出图与解码循环运行，但没有在电脑端同时显示二维码做完整握手。
+
 ## 没有在硬件上运行
 
 - 没有 Windows 机器，没有安装或测试 IDD 虚拟显示驱动，没有跑 NVENC。
-- 没有平板或手机，没有相机扫码，没有 Android 模拟器或 APK。
 - 没有制作安装包，也没有核对 DPAPI 和 Android Keystore 的实机读写。

@@ -1,7 +1,9 @@
 #include <QtTest>
 #include <QDateTime>
 #include <QFile>
+#include <QHostAddress>
 #include <QPainter>
+#include <QSet>
 #include <QSettings>
 #include <QTcpSocket>
 #include <QUrl>
@@ -36,26 +38,34 @@ class PairingTest : public QObject {
     }
 
     void manualCodeRules() {
-        QVERIFY(!pairingCheckManualCode("K7M2P9QX4").ok);
-        QVERIFY(!pairingCheckManualCode("k7m2p9qx4r").ok);
-        QCOMPARE(pairingNormalizeManualCode("  k7m2p9qx4r8n "), QString("K7M2P9QX4R8N"));
+        QVERIFY(!pairingCheckManualCode("K7M2P").ok);
+        QVERIFY(!pairingCheckManualCode(QString()).ok);
+        QVERIFY(!pairingCheckManualCode("K7M2-P9Q").ok);
+        QVERIFY(!pairingCheckManualCode("K7M2 P9Q").ok);
+        QVERIFY(!pairingCheckManualCode("AAAAAAAA").ok);
+        QCOMPARE(pairingNormalizeManualCode("  k7m2p9 "), QString("K7M2P9"));
         QVERIFY(pairingCheckManualCode("k7m2p9qx4r8n").ok);
-        QVERIFY(!pairingCheckManualCode("ABCDEFGHJKLM").ok);
-        QVERIFY(!pairingCheckManualCode("234567892345").ok);
-        QVERIFY(!pairingCheckManualCode("IIIIIIIIIIII").ok);
-        QVERIFY(!pairingCheckManualCode("OOOOOOOOOOOO").ok);
-        QVERIFY(!pairingCheckManualCode("000000000000").ok);
-        QVERIFY(!pairingCheckManualCode("111111111111").ok);
-        QVERIFY(!pairingCheckManualCode("AAAAAAAAAAAA").ok);
-        QVERIFY(!pairingCheckManualCode("222222222222").ok);
-        QVERIFY(!pairingCheckManualCode("ABCD23456789").ok);
-        QVERIFY(!pairingCheckManualCode("ZZZZZ5432ZZZ").ok);
-        QVERIFY(!pairingCheckManualCode("K7M2-P9QX4R8").ok);
+        // Ambiguous characters are ordinary letters and digits now.
+        QVERIFY(pairingCheckManualCode("IIIIIIII12").ok);
+        QVERIFY(pairingCheckManualCode("OOOOOOOO12").ok);
+        QVERIFY(!pairingCheckManualCode("IIIIIIIIII").ok);
+        QVERIFY(!pairingCheckManualCode("OOOOOOOOOO").ok);
+        QVERIFY(pairingCheckManualCode("0000000001").ok);
+        QVERIFY(pairingCheckManualCode("1111111112").ok);
+        QVERIFY(pairingCheckManualCode("2222222223").ok);
+        // Runs and mixed sequences are fine; the code is only a shared password.
+        QVERIFY(pairingCheckManualCode("ABCDEFGHJKLM").ok);
+        QVERIFY(pairingCheckManualCode("234567892345").ok);
+        QVERIFY(pairingCheckManualCode("ABCD23456789").ok);
+        QVERIFY(pairingCheckManualCode("ZZZZZ5432ZZZ").ok);
+        QVERIFY(pairingCheckManualCode("ABCDEF").ok);
+        QVERIFY(pairingCheckManualCode("123456").ok);
         QVERIFY(pairingCheckManualCode("A2B3C4D5E6F7").ok);
         QVERIFY(pairingCheckManualCode("H3R8K2M7Q4P9").ok);
         const auto generated = pairingGenerateManualCode();
         QVERIFY(pairingCheckManualCode(generated).ok);
-        QCOMPARE(generated.size(), 12);
+        QCOMPARE(generated.size(), 8);
+        QCOMPARE(generated, generated.toUpper());
     }
 
     void payloadRoundTripExpiryTamperAndReuse() {
@@ -269,26 +279,36 @@ class PairingTest : public QObject {
         QCOMPARE(client.establishedLongTermKey(), established);
         QTRY_COMPARE(SecretStore::instance().load(QStringLiteral("channel-long-term-key")), established);
 
+        // A stored key never stands in for the code: different codes must fail even
+        // though both sides already hold a 32-byte channel-long-term-key.
         PairingCredential other;
         other.kind = PairingSecretKind::ManualCode;
         other.secret = QStringLiteral("H3R8K2M7Q4P9");
-        Peer laterServer;
-        Peer laterClient;
-        QVERIFY(pairingListen(laterServer, 0, other, QStringLiteral("127.0.0.1")));
-        QVERIFY(pairingConnect(laterClient, QStringLiteral("127.0.0.1"), laterServer.serverPort(), manual));
-        QTRY_VERIFY_WITH_TIMEOUT(laterServer.ready() && laterClient.ready(), 5000);
-        QCOMPARE(laterServer.establishedLongTermKey(), established);
-
-        SecretStore::instance().remove(QStringLiteral("channel-long-term-key"));
         Peer mismatchServer;
         Peer mismatchClient;
-        QVERIFY(pairingListen(mismatchServer, 0, manual, QStringLiteral("127.0.0.1")));
-        QVERIFY(pairingConnect(mismatchClient, QStringLiteral("127.0.0.1"), mismatchServer.serverPort(), other));
+        QVERIFY(pairingListen(mismatchServer, 0, other, QStringLiteral("127.0.0.1")));
+        QVERIFY(pairingConnect(mismatchClient, QStringLiteral("127.0.0.1"), mismatchServer.serverPort(), manual));
         QTest::qWait(350);
         QVERIFY(!mismatchServer.ready());
         QVERIFY(!mismatchClient.ready());
         mismatchServer.close();
         mismatchClient.close();
+
+        // Re-pairing with one shared new code mints a fresh key and overwrites the store.
+        Peer laterServer;
+        Peer laterClient;
+        QVERIFY(pairingListen(laterServer, 0, other, QStringLiteral("127.0.0.1")));
+        QVERIFY(pairingConnect(laterClient, QStringLiteral("127.0.0.1"), laterServer.serverPort(), other));
+        QTRY_VERIFY_WITH_TIMEOUT(laterServer.ready() && laterClient.ready(), 5000);
+        const auto rekeyed = laterServer.establishedLongTermKey();
+        QCOMPARE(rekeyed.size(), 32);
+        QVERIFY(rekeyed != established);
+        QCOMPARE(laterClient.establishedLongTermKey(), rekeyed);
+        QTRY_COMPARE(SecretStore::instance().load(QStringLiteral("channel-long-term-key")), rekeyed);
+        laterServer.close();
+        laterClient.close();
+
+        SecretStore::instance().remove(QStringLiteral("channel-long-term-key"));
 
         Peer legacyServer;
         QVERIFY(pairingListen(legacyServer, 0, manual, QStringLiteral("127.0.0.1")));
@@ -314,6 +334,97 @@ class PairingTest : public QObject {
         QCOMPARE(qrServer.establishedLongTermKey(), qrClient.establishedLongTermKey());
         Peer replay;
         QVERIFY(!pairingListen(replay, 0, once, QStringLiteral("127.0.0.1")));
+    }
+
+    void sessionListenRequiresAStoredKey() {
+        SecretStore::instance().remove(QStringLiteral("channel-long-term-key"));
+        // No key anywhere: the session entry points must refuse rather than fall back
+        // to a public token that anyone on the LAN could reuse.
+        Peer none;
+        QVERIFY(!pairingStoredKeyAvailable(none));
+        QVERIFY(!sessionListen(none, 0, QStringLiteral("127.0.0.1")));
+        QVERIFY(none.serverPort() == 0);
+        QVERIFY(!pairingStoredKeyAvailable(none));
+        Peer noneClient;
+        QVERIFY(!sessionConnect(noneClient, QStringLiteral("127.0.0.1"), 27183));
+        QTest::qWait(50);
+        QVERIFY(!noneClient.ready());
+
+        // A key on the Peer alone is enough; the secret store is not consulted again.
+        const QByteArray key(32, 'S');
+        Peer server;
+        server.setLongTermKey(key);
+        QVERIFY(pairingStoredKeyAvailable(server));
+        QVERIFY(sessionListen(server, 0, QStringLiteral("127.0.0.1")));
+        QVERIFY(server.serverPort() != 0);
+        Peer client;
+        client.setLongTermKey(key);
+        QVERIFY(sessionConnect(client, QStringLiteral("127.0.0.1"), server.serverPort()));
+        QTRY_VERIFY_WITH_TIMEOUT(server.ready() && client.ready(), 5000);
+        QCOMPARE(server.establishedLongTermKey(), key);
+        QCOMPARE(client.establishedLongTermKey(), key);
+        server.close();
+        client.close();
+
+        // A different 32-byte key is rejected: the session password is the key itself.
+        Peer mismatchServer;
+        mismatchServer.setLongTermKey(key);
+        QVERIFY(sessionListen(mismatchServer, 0, QStringLiteral("127.0.0.1")));
+        Peer mismatchClient;
+        mismatchClient.setLongTermKey(QByteArray(32, 'Z'));
+        QVERIFY(sessionConnect(mismatchClient, QStringLiteral("127.0.0.1"), mismatchServer.serverPort()));
+        QTest::qWait(350);
+        QVERIFY(!mismatchServer.ready());
+        QVERIFY(!mismatchClient.ready());
+        mismatchServer.close();
+        mismatchClient.close();
+
+        // Pairing codes play no part here, so a different code in settings changes nothing.
+        QSettings settings;
+        SecretStore store(settings);
+        QVERIFY(store.store(QStringLiteral("manual-code"), "DIFFERENTCODE"));
+        settings.sync();
+        Peer sessionServer;
+        sessionServer.setLongTermKey(key);
+        QVERIFY(sessionListen(sessionServer, 0, QStringLiteral("127.0.0.1")));
+        Peer sessionClient;
+        sessionClient.setLongTermKey(key);
+        QVERIFY(sessionConnect(sessionClient, QStringLiteral("127.0.0.1"), sessionServer.serverPort()));
+        QTRY_VERIFY_WITH_TIMEOUT(sessionServer.ready() && sessionClient.ready(), 5000);
+        sessionServer.close();
+        sessionClient.close();
+    }
+
+    void qrFrameFindsCodeAtAnyQuarterTurn() {
+        PairingPayload payload;
+        payload.host = "192.168.1.30";
+        payload.port = kPairingQrPort;
+        payload.secret = pairingGenerateOneTimeSecret();
+        payload.fingerprint = pairingPublicKeyFingerprint(QByteArray(32, 'L'));
+        payload.expiry = 1700000000;
+        const auto text = pairingEncodePayload(payload);
+        const auto code = pairingQrImage(text);
+        QVERIFY(!code.isNull());
+        // The camera buffer is the scene rotated by -upright. Reading it with the
+        // wrong preferred angle must still find the code.
+        for (int upright : {0, 90, 180, 270}) {
+            const auto sensor = pairingRotateClockwise(code, (360 - upright) % 360);
+            QCOMPARE(pairingReadQrFrame(sensor, upright), QStringList{text});
+            const int wrong = (upright + 90) % 360;
+            QCOMPARE(pairingReadQrFrame(sensor, wrong), QStringList{text});
+        }
+    }
+
+    void localIpv4SkipsAddressesATabletCannotReach() {
+        const auto hosts = pairingLocalIpv4();
+        for (const auto& host : hosts) {
+            QHostAddress address(host);
+            QVERIFY2(!address.isNull(), qPrintable(host));
+            QVERIFY2(!address.isLoopback(), qPrintable(host));
+            QVERIFY2(!address.isLinkLocal(), qPrintable(host));
+            QCOMPARE(address.protocol(), QAbstractSocket::IPv4Protocol);
+        }
+        QVERIFY(hosts.size() == QSet<QString>(hosts.begin(), hosts.end()).size());
     }
 
     void credentialKinds() {

@@ -38,6 +38,8 @@ target_link_libraries(settings_support_test PRIVATE furina_widgets)
 furina_offscreen_test(settings_support)
 furina_test(usb_network_test usb_network tests/unit/usb_network_test.cpp)
 target_link_libraries(usb_network_test PRIVATE fukaros_platform)
+furina_test(lan_discovery_test lan_discovery tests/unit/lan_discovery_test.cpp)
+target_link_libraries(lan_discovery_test PRIVATE fukaros_platform)
 
 add_executable(pointer_gain_test tests/unit/pointer_gain_test.c core/input/pointer_gain.c)
 target_include_directories(pointer_gain_test PRIVATE core/input)

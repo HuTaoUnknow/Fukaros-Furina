@@ -352,6 +352,10 @@ class PeerIo : public QObject {
         if (appReady || !socket)
             return;
         appReady = true;
+        {
+            QMutexLocker lock(&peer->m_infoLock);
+            peer->m_remote = socket->peerAddress();
+        }
         peer->m_ready.store(true);
         limiter.succeed(socket->peerAddress().toString());
         if (usingOneTime)
@@ -400,6 +404,10 @@ class PeerIo : public QObject {
         appReady = false;
         peer->m_ready.store(false);
         peer->m_cursorReady.store(false);
+        {
+            QMutexLocker lock(&peer->m_infoLock);
+            peer->m_remote = QHostAddress();
+        }
         for (const auto& item : wire)
             if (item.video)
                 peer->m_videoInFlight.fetch_sub(1);
@@ -768,6 +776,11 @@ void Peer::setLongTermKey(const QByteArray& key) {
         m_longTermKey = key;
 }
 
+QByteArray Peer::longTermKey() const {
+    QMutexLocker lock(&m_infoLock);
+    return m_longTermKey;
+}
+
 QByteArray Peer::establishedLongTermKey() const {
     QMutexLocker lock(&m_infoLock);
     return m_established;
@@ -936,6 +949,11 @@ unsigned Peer::videoQueueMs() const {
 QHostAddress Peer::boundAddress() const {
     QMutexLocker lock(&m_infoLock);
     return m_bound;
+}
+
+QHostAddress Peer::remoteAddress() const {
+    QMutexLocker lock(&m_infoLock);
+    return m_remote;
 }
 
 quint16 Peer::serverPort() const {
